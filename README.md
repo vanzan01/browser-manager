@@ -2,6 +2,10 @@
 
 A powerful browser extension for developers and privacy-conscious users to manage, analyze, and clean browser storage data.
 
+## Repository
+
+Official GitHub repository: [https://github.com/vanzan01/browser-manager](https://github.com/vanzan01/browser-manager)
+
 ## Purpose
 
 Originally built to solve a common web development challenge: cleaning test sites between sessions. As developers, we often need pristine environments to test our applications, but manually clearing cookies, cache, and other storage for specific domains is tedious and error-prone.
