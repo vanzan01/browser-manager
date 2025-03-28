@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="128" height="128" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Database base -->
+  <ellipse cx="64" cy="96" rx="48" ry="16" fill="#4B5563"/>
+  <path d="M112 64C112 73 93.1765 80 64 80C34.8235 80 16 73 16 64V96C16 105 34.8235 112 64 112C93.1765 112 112 105 112 96V64Z" fill="#4B5563"/>
+  <ellipse cx="64" cy="32" rx="48" ry="16" fill="#4B5563"/>
+  <path d="M112 32V64C112 73 93.1765 80 64 80C34.8235 80 16 73 16 64V32" fill="#4B5563"/>
+  
+  <!-- Clock overlay -->
+  <circle cx="64" cy="64" r="40" fill="#60A5FA"/>
+  <path d="M64 40V64L80 80" stroke="white" stroke-width="8" stroke-linecap="round"/>
+</svg> 

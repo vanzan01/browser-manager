@@ -113,111 +113,7 @@ export default function HistoryManager() {
     }
   }, [targetSites, isEnabled, autoCleanInterval, lastCleaned, timerActive, nextCleaningTime, triggerSite]);
 
-  // Setup tab navigation listener
-  useEffect(() => {
-    if (!isExtension || !isEnabled || autoCleanInterval <= 0 || targetSites.length === 0) {
-      console.log('Tab monitoring disabled:', {
-        isExtension,
-        isEnabled,
-        autoCleanInterval,
-        targetSitesCount: targetSites.length
-      });
-      return;
-    }
-
-    console.log('Setting up tab monitoring with sites:', targetSites);
-
-    const handleTabUpdated = (tabId: number, changeInfo: chrome.tabs.TabChangeInfo, tab: chrome.tabs.Tab) => {
-      // Only check when a URL change is complete
-      if (changeInfo.status === 'complete' && tab.url) {
-        try {
-          const domain = extractDomain(tab.url);
-          console.log(`Tab updated with URL: ${tab.url}, extracted domain: ${domain}`);
-          
-          // Check if domain matches any tracked site
-          const isTrackedSite = targetSites.some(site => {
-            const siteLower = site.toLowerCase();
-            const domainLower = domain.toLowerCase();
-            const isMatch = domainLower === siteLower || 
-                   domainLower === `www.${siteLower}` || 
-                   domainLower.endsWith(`.${siteLower}`);
-            console.log(`Checking if ${domainLower} matches ${siteLower}: ${isMatch}`);
-            return isMatch;
-          });
-          
-          if (isTrackedSite && !timerActive) {
-            console.log(`Visited tracked site: ${domain}, starting timer`);
-            startTimer(domain);
-          }
-        } catch (error) {
-          console.error('Error processing tab URL:', error);
-        }
-      }
-    };
-
-    const handleTabActivated = async (activeInfo: chrome.tabs.TabActiveInfo) => {
-      try {
-        const tab = await chrome.tabs.get(activeInfo.tabId);
-        if (tab.url) {
-          const domain = extractDomain(tab.url);
-          console.log(`Tab activated with URL: ${tab.url}, extracted domain: ${domain}`);
-          
-          // Check if domain matches any tracked site
-          const isTrackedSite = targetSites.some(site => {
-            const siteLower = site.toLowerCase();
-            const domainLower = domain.toLowerCase();
-            return domainLower === siteLower || 
-                   domainLower === `www.${siteLower}` || 
-                   domainLower.endsWith(`.${siteLower}`);
-          });
-          
-          if (isTrackedSite && !timerActive) {
-            console.log(`Activated tracked site: ${domain}, starting timer`);
-            startTimer(domain);
-          }
-        }
-      } catch (error) {
-        console.error('Error handling tab activation:', error);
-      }
-    };
-
-    // Register listeners
-    if (chrome.tabs && chrome.tabs.onUpdated) {
-      chrome.tabs.onUpdated.addListener(handleTabUpdated);
-      console.log('Registered tab update listener');
-    }
-    
-    if (chrome.tabs && chrome.tabs.onActivated) {
-      chrome.tabs.onActivated.addListener(handleTabActivated);
-      console.log('Registered tab activation listener');
-    }
-
-    // Check currently active tab on setup
-    const checkCurrentTab = async () => {
-      try {
-        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-        if (tab?.url) {
-          console.log('Checking current active tab:', tab.url);
-          handleTabUpdated(tab.id || 0, { status: 'complete' } as chrome.tabs.TabChangeInfo, tab);
-        }
-      } catch (error) {
-        console.error('Error checking current tab:', error);
-      }
-    };
-    checkCurrentTab();
-
-    return () => {
-      if (chrome.tabs && chrome.tabs.onUpdated) {
-        chrome.tabs.onUpdated.removeListener(handleTabUpdated);
-      }
-      if (chrome.tabs && chrome.tabs.onActivated) {
-        chrome.tabs.onActivated.removeListener(handleTabActivated);
-      }
-      console.log('Cleaned up tab listeners');
-    };
-  }, [isEnabled, autoCleanInterval, targetSites, timerActive]);
-
-  // Automatic history cleaning timer
+  // Automatic history cleaning timer display
   useEffect(() => {
     if (!isEnabled || autoCleanInterval <= 0 || targetSites.length === 0 || !timerActive) {
       setTimeRemaining('');
@@ -228,7 +124,6 @@ export default function HistoryManager() {
     const updateTimeRemaining = () => {
       const now = new Date().getTime();
       if (now >= nextCleaningTime) {
-        clearHistory();
         return;
       }
 
@@ -242,32 +137,13 @@ export default function HistoryManager() {
     // Initial update
     updateTimeRemaining();
 
-    // Set interval to update countdown and check if cleaning is needed
+    // Set interval to update countdown display
     const intervalId = setInterval(() => {
       updateTimeRemaining();
     }, 1000);
 
     return () => clearInterval(intervalId);
   }, [isEnabled, autoCleanInterval, targetSites, timerActive, nextCleaningTime]);
-
-  // Function to start the timer
-  const startTimer = (domain: string) => {
-    const now = new Date().getTime();
-    const cleanTime = now + (autoCleanInterval * 60 * 1000);
-    
-    setNextCleaningTime(cleanTime);
-    setTimerActive(true);
-    setTriggerSite(domain);
-    
-    console.log(`Timer started, will clean in ${autoCleanInterval} minutes`);
-  };
-
-  // Function to reset the timer
-  const resetTimer = () => {
-    setTimerActive(false);
-    setTimeRemaining('');
-    setTriggerSite('');
-  };
 
   const addSite = () => {
     if (newSite && !targetSites.includes(newSite)) {
@@ -343,6 +219,16 @@ export default function HistoryManager() {
       console.error('Error clearing history:', error);
       const errorMessage = error instanceof Error ? error.message : String(error);
       alert(`Error clearing history: ${errorMessage}`);
+    }
+  };
+
+  // Function to reset the timer
+  const resetTimer = () => {
+    if (isExtension) {
+      chrome.storage.sync.set({
+        timerActive: false,
+        triggerSite: ''
+      });
     }
   };
 

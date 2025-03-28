@@ -2,24 +2,48 @@
 
 A powerful browser extension for developers and privacy-conscious users to manage, analyze, and clean browser storage data.
 
-## Repository
+## Quick Start
 
-Official GitHub repository: [https://github.com/vanzan01/browser-manager](https://github.com/vanzan01/browser-manager)
+1. Clone this repository
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
+3. Build the extension:
+   ```bash
+   npm run build
+   ```
+4. Load the extension in your browser:
+   - Chrome/Brave: Go to `chrome://extensions/`, enable "Developer mode", click "Load unpacked", and select the `dist` folder
+   - Firefox: Go to `about:debugging`, click "This Firefox", click "Load Temporary Add-on", and select any file in the `dist` folder
+   - Edge: Go to `edge://extensions/`, enable "Developer mode", click "Load unpacked", and select the `dist` folder
 
-## Purpose
+## Development
 
-Originally built to solve a common web development challenge: cleaning test sites between sessions. As developers, we often need pristine environments to test our applications, but manually clearing cookies, cache, and other storage for specific domains is tedious and error-prone.
+### Icon Management
+The extension includes both SVG source files and PNG files for icons:
+- `public/icons/*.svg` - Source files that can be modified
+- `public/icons/*.png` - Generated files used by the extension
 
-This extension started as a simple tool but evolved into a comprehensive storage management solution with powerful analytics and selective cleaning capabilities.
+If you modify any SVG files, regenerate the PNGs:
+```bash
+npm run convert-icons
+```
 
-## Key Features
+### Development Commands
+- `npm run dev` - Start development server
+- `npm run build` - Build the extension
+- `npm run preview` - Preview the build
+- `npm run convert-icons` - Convert SVG icons to PNG
 
-### 🧭 Storage Dashboard
+### Extension Features
+
+#### 🧭 Storage Dashboard
 - Visualize total browser storage usage
 - Identify the largest domains consuming space
 - Intuitive cards for each domain showing storage breakdown
 
-### 🔍 Domain-Level Insights
+#### 🔍 Domain-Level Insights
 - Detailed view for each domain showing:
   - History entries
   - Cache size
@@ -27,7 +51,7 @@ This extension started as a simple tool but evolved into a comprehensive storage
   - Local storage usage
 - Page-specific breakdowns within each domain
 
-### 📊 Advanced Analytics
+#### 📊 Advanced Analytics
 - Timeline charts showing storage growth over time (7/30/90 days)
 - Storage type distribution visualization
 - Customizable filters to sort domains by different metrics:
@@ -37,7 +61,7 @@ This extension started as a simple tool but evolved into a comprehensive storage
   - Cookie data
   - LocalStorage usage
 
-### 🧹 Selective Cleaning Tools
+#### 🧹 Selective Cleaning Tools
 - Clear all data for specific domains
 - Clear individual pages within domains
 - Bulk actions for clearing specific types of data:
@@ -45,6 +69,14 @@ This extension started as a simple tool but evolved into a comprehensive storage
   - All cache
   - All cookies
   - All localStorage
+
+### Background Operation
+The extension operates in the background to:
+1. Monitor visited sites
+2. Track storage usage
+3. Automatically clean history based on your settings
+
+Settings persist even when the browser is closed, and automatic cleaning continues to work in the background.
 
 ## Use Cases
 
@@ -68,36 +100,6 @@ This extension started as a simple tool but evolved into a comprehensive storage
 - Identify and clear bloated cache to improve browser speed
 - See which domains are consuming disproportionate resources
 - Monitor storage growth over time
-
-## Installation
-
-1. Download the extension from the Chrome Web Store / Firefox Add-ons / Edge Add-ons (links coming soon)
-2. Or install manually:
-   - Clone this repository
-   - Run `npm install` followed by `npm run build`
-   - Load the extension in your browser:
-     - Chrome/Brave: Go to `chrome://extensions/`, enable "Developer mode", click "Load unpacked", and select the `dist` folder
-     - Firefox: Go to `about:debugging`, click "This Firefox", click "Load Temporary Add-on", and select any file in the `dist` folder
-     - Edge: Go to `edge://extensions/`, enable "Developer mode", click "Load unpacked", and select the `dist` folder
-
-## How to Use
-
-### Storage Dashboard
-The main view shows an overview of your browser's storage usage, listing domains by storage size. Click on any domain to see detailed information.
-
-### Domain Details
-View and manage storage for a specific domain, including:
-- Storage metrics breakdown
-- List of individual pages
-- Option to clear all data for this domain
-- Page-specific cleaning options
-
-### Advanced Analytics
-Access advanced visualization and filtering:
-- Switch between time ranges (7/30/90 days)
-- View storage distribution by type
-- Sort top domains by different metrics
-- Access bulk cleaning actions
 
 ## Privacy & Security
 

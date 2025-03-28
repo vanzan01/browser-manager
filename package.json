@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "convert-icons": "node scripts/convert-icons.js"
   },
   "dependencies": {
     "lucide-react": "^0.344.0",
@@ -16,6 +17,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.9.1",
+    "@svgr/cli": "^8.1.0",
     "@types/chrome": "^0.0.313",
     "@types/react": "^18.3.5",
     "@types/react-dom": "^18.3.0",
@@ -26,6 +28,7 @@
     "eslint-plugin-react-refresh": "^0.4.11",
     "globals": "^15.9.0",
     "postcss": "^8.4.35",
+    "sharp": "^0.33.5",
     "tailwindcss": "^3.4.1",
     "typescript": "^5.5.3",
     "typescript-eslint": "^8.3.0",
