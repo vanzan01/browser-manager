@@ -8,7 +8,8 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "convert-icons": "node scripts/convert-icons.js"
+    "convert-icons": "node scripts/convert-icons.js",
+    "test": "vitest"
   },
   "dependencies": {
     "lucide-react": "^0.344.0",
@@ -30,6 +31,7 @@
     "postcss": "^8.4.35",
     "sharp": "^0.33.5",
     "tailwindcss": "^3.4.1",
+    "vitest": "^1.4.0",
     "typescript": "^5.5.3",
     "typescript-eslint": "^8.3.0",
     "vite": "^5.4.2",

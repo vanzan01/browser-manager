@@ -1,4 +1,15 @@
-let settings = {
+/// <reference types="chrome" />
+
+interface Settings {
+  isEnabled: boolean;
+  targetSites: string[];
+  autoCleanInterval: number;
+  timerActive: boolean;
+  nextCleaningTime: number;
+  triggerSite: string;
+}
+
+let settings: Settings = {
   isEnabled: false,
   targetSites: [],
   autoCleanInterval: 0,
@@ -39,7 +50,7 @@ chrome.storage.onChanged.addListener((changes, namespace) => {
 });
 
 // Helper function to extract domain
-function extractDomain(url) {
+function extractDomain(url: string): string {
   try {
     return new URL(url).hostname;
   } catch (e) {
@@ -48,7 +59,7 @@ function extractDomain(url) {
 }
 
 // Helper function to check if a domain matches a tracked site
-function isDomainMatch(domain, trackedSite) {
+function isDomainMatch(domain: string, trackedSite: string): boolean {
   const domainLower = domain.toLowerCase();
   const siteLower = trackedSite.toLowerCase();
   return domainLower === siteLower || 
@@ -57,7 +68,7 @@ function isDomainMatch(domain, trackedSite) {
 }
 
 // Function to start the timer
-function startTimer(domain) {
+function startTimer(domain: string): void {
   const now = new Date().getTime();
   const cleanTime = now + (settings.autoCleanInterval * 60 * 1000);
   
@@ -69,7 +80,7 @@ function startTimer(domain) {
 }
 
 // Function to clear history
-async function clearHistory() {
+async function clearHistory(): Promise<void> {
   try {
     const startTime = 0;
     const endTime = new Date().getTime();
@@ -117,7 +128,7 @@ async function clearHistory() {
 }
 
 // Check timer and clear history if needed
-function checkTimer() {
+function checkTimer(): void {
   if (!settings.isEnabled || !settings.timerActive || settings.autoCleanInterval <= 0) {
     return;
   }

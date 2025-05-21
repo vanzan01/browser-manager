@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "Brave History Manager",
+  "name": "Browser Storage Manager",
   "version": "1.0",
   "description": "Selectively manage browser history for specific domains",
   "permissions": [
