@@ -34,6 +34,8 @@ npm run convert-icons
 - `npm run dev` - Start development server
 - `npm run build` - Build the extension
 - `npm run preview` - Preview the build
+- `npm run lint` - Run ESLint to check for code quality
+- `npm run test` - Run unit tests with Vitest
 - `npm run convert-icons` - Convert SVG icons to PNG
 
 ### Extension Features
@@ -76,7 +78,7 @@ The extension operates in the background to:
 2. Track storage usage
 3. Automatically clean history based on your settings
 
-Settings persist even when the browser is closed, and automatic cleaning continues to work in the background.
+The background script is implemented in TypeScript and is compiled as part of the build process. Settings persist even when the browser is closed, and automatic cleaning continues to work in the background.
 
 ## Use Cases
 
