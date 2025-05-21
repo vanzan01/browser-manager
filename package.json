@@ -9,7 +9,8 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "convert-icons": "node scripts/convert-icons.js",
-    "test": "vitest"
+    "test": "node run-tests.js",
+    "test:vitest": "vitest"
   },
   "dependencies": {
     "lucide-react": "^0.344.0",
