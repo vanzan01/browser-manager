@@ -258,8 +258,44 @@ export default class StorageAnalyzer {
         }
       }
       
-      // Handle localStorage deletion - this is tricky from an extension
-      // Would need a content script approach to clear localStorage for specific domains
+      // Handle localStorage deletion
+      if (!options.types || options.types.includes('localStorage')) {
+        // For reddit.com, specifically delete the recent-subreddits-store
+        if (options.domain === 'reddit.com' || options.domain === 'www.reddit.com') {
+          try {
+            // Execute script in reddit.com tabs to clear localStorage
+            const tabs = await chrome.tabs.query({});
+            for (const tab of tabs) {
+              if (tab.url && (tab.url.includes('reddit.com')) && tab.id) {
+                try {
+                  await chrome.scripting.executeScript({
+                    target: { tabId: tab.id },
+                    func: () => {
+                      // Remove the specific localStorage item
+                      localStorage.removeItem('recent-subreddits-store');
+                      // Also remove any other reddit-related localStorage items
+                      const keysToRemove = [];
+                      for (let i = 0; i < localStorage.length; i++) {
+                        const key = localStorage.key(i);
+                        if (key && (key.includes('reddit') || key.includes('subreddit'))) {
+                          keysToRemove.push(key);
+                        }
+                      }
+                      keysToRemove.forEach(key => localStorage.removeItem(key));
+                    }
+                  });
+                  itemsDeleted++;
+                } catch {
+                  // Tab might not be accessible, continue
+                  console.warn('Could not clear localStorage for tab:', tab.url);
+                }
+              }
+            }
+          } catch (error) {
+            console.error('Error clearing localStorage:', error);
+          }
+        }
+      }
       
       return itemsDeleted;
     } catch (error) {

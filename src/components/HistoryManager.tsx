@@ -168,30 +168,26 @@ export default function HistoryManager() {
         return;
       }
 
-      // Remove time restriction - clear all history
-      const startTime = 0;
-      const endTime = new Date().getTime();
-      
-      console.log('Starting history clearing for sites:', targetSites);
+      console.log('Starting enhanced history clearing for sites:', targetSites);
       let totalCleared = 0;
 
-      // Search for history entries from target sites
+      // Clear data for each target site using enhanced deletion
       for (const site of targetSites) {
-        console.log(`Searching for history entries containing: ${site}`);
+        console.log(`Processing site: ${site}`);
+        
+        // Clear history
         const historyItems = await chrome.history.search({
           text: site,
-          startTime: startTime,
-          endTime: endTime,
-          maxResults: 10000 // Increase max results
+          startTime: 0,
+          endTime: new Date().getTime(),
+          maxResults: 10000
         });
 
-        console.log(`Found ${historyItems.length} items for ${site}`);
+        console.log(`Found ${historyItems.length} history items for ${site}`);
 
-        // Delete found history entries
         for (const item of historyItems) {
           if (item.url) {
             try {
-              // Improved domain matching - handle both with and without www prefix
               const itemHostname = new URL(item.url).hostname.toLowerCase();
               const siteToMatch = site.toLowerCase();
               
@@ -206,6 +202,62 @@ export default function HistoryManager() {
             }
           }
         }
+
+        // Clear localStorage for Reddit specifically - ONLY the recent subreddits data
+        if (site.includes('reddit.com') || site === 'reddit.com' || site === 'www.reddit.com') {
+          console.log('Clearing ONLY Reddit recent subreddits localStorage for site:', site);
+          try {
+            const tabs = await chrome.tabs.query({});
+            console.log(`Found ${tabs.length} tabs to check for Reddit`);
+            
+            for (const tab of tabs) {
+              if (tab.url && (tab.url.includes('reddit.com') || tab.url.includes('www.reddit.com')) && tab.id) {
+                console.log('Clearing ONLY recent subreddits localStorage for Reddit tab:', tab.url);
+                try {
+                  await chrome.scripting.executeScript({
+                    target: { tabId: tab.id },
+                    func: () => {
+                      console.log('Executing PRECISE localStorage clearing script on Reddit tab');
+                      
+                      // Check if the key exists first
+                      const targetKey = 'recent-subreddits-store';
+                      const keyExists = localStorage.getItem(targetKey) !== null;
+                      console.log(`Key "${targetKey}" exists: ${keyExists}`);
+                      
+                      if (keyExists) {
+                        localStorage.removeItem(targetKey);
+                        console.log(`Successfully removed localStorage key: ${targetKey}`);
+                      } else {
+                        console.log(`Key "${targetKey}" not found in localStorage`);
+                      }
+                      
+                      // Also check sessionStorage for the same key
+                      const sessionKeyExists = sessionStorage.getItem(targetKey) !== null;
+                      console.log(`SessionStorage key "${targetKey}" exists: ${sessionKeyExists}`);
+                      
+                      if (sessionKeyExists) {
+                        sessionStorage.removeItem(targetKey);
+                        console.log(`Successfully removed sessionStorage key: ${targetKey}`);
+                      }
+                      
+                      // List all localStorage keys for debugging (without removing them)
+                      const allKeys = [];
+                      for (let i = 0; i < localStorage.length; i++) {
+                        allKeys.push(localStorage.key(i));
+                      }
+                      console.log('All localStorage keys:', allKeys);
+                    }
+                  });
+                  console.log('Successfully executed precise localStorage clearing script');
+                } catch (scriptError) {
+                  console.warn('Could not clear localStorage for tab:', tab.url, scriptError);
+                }
+              }
+            }
+          } catch (error) {
+            console.error('Error clearing localStorage for Reddit:', error);
+          }
+        }
       }
       
       // Update last cleaned time and reset timer
@@ -213,8 +265,8 @@ export default function HistoryManager() {
       setLastCleaned(now.toISOString());
       resetTimer();
       
-      console.log(`Total history entries cleared: ${totalCleared}`);
-      alert(`History cleared: ${totalCleared} entries removed.`);
+      console.log(`Total history entries cleared: ${totalCleared} (plus Reddit recent subreddits localStorage)`);
+      alert(`Enhanced cleaning completed: ${totalCleared} history entries removed, plus Reddit recent subreddits data cleared.`);
     } catch (error: unknown) {
       console.error('Error clearing history:', error);
       const errorMessage = error instanceof Error ? error.message : String(error);

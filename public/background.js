@@ -68,19 +68,18 @@ function startTimer(domain) {
   });
 }
 
-// Function to clear history
+// Function to clear history and other data
 async function clearHistory() {
   try {
-    const startTime = 0;
-    const endTime = new Date().getTime();
     let totalCleared = 0;
 
-    // Search and delete history entries for each target site
+    // Clear data for each target site using enhanced deletion
     for (const site of settings.targetSites) {
+      // Clear history
       const historyItems = await chrome.history.search({
         text: site,
-        startTime: startTime,
-        endTime: endTime,
+        startTime: 0,
+        endTime: new Date().getTime(),
         maxResults: 10000
       });
 
@@ -101,6 +100,62 @@ async function clearHistory() {
           }
         }
       }
+
+      // Clear localStorage for Reddit specifically - ONLY the recent subreddits data
+      if (site.includes('reddit.com') || site === 'reddit.com' || site === 'www.reddit.com') {
+        console.log('Attempting to clear ONLY Reddit recent subreddits localStorage for site:', site);
+        try {
+          const tabs = await chrome.tabs.query({});
+          console.log(`Found ${tabs.length} tabs to check for Reddit`);
+          
+          for (const tab of tabs) {
+            if (tab.url && (tab.url.includes('reddit.com') || tab.url.includes('www.reddit.com')) && tab.id) {
+              console.log('Clearing ONLY recent subreddits localStorage for Reddit tab:', tab.url);
+              try {
+                await chrome.scripting.executeScript({
+                  target: { tabId: tab.id },
+                  func: () => {
+                    console.log('Executing PRECISE localStorage clearing script on Reddit tab');
+                    
+                    // Check if the key exists first
+                    const targetKey = 'recent-subreddits-store';
+                    const keyExists = localStorage.getItem(targetKey) !== null;
+                    console.log(`Key "${targetKey}" exists: ${keyExists}`);
+                    
+                    if (keyExists) {
+                      localStorage.removeItem(targetKey);
+                      console.log(`Successfully removed localStorage key: ${targetKey}`);
+                    } else {
+                      console.log(`Key "${targetKey}" not found in localStorage`);
+                    }
+                    
+                    // Also check sessionStorage for the same key
+                    const sessionKeyExists = sessionStorage.getItem(targetKey) !== null;
+                    console.log(`SessionStorage key "${targetKey}" exists: ${sessionKeyExists}`);
+                    
+                    if (sessionKeyExists) {
+                      sessionStorage.removeItem(targetKey);
+                      console.log(`Successfully removed sessionStorage key: ${targetKey}`);
+                    }
+                    
+                    // List all localStorage keys for debugging (without removing them)
+                    const allKeys = [];
+                    for (let i = 0; i < localStorage.length; i++) {
+                      allKeys.push(localStorage.key(i));
+                    }
+                    console.log('All localStorage keys:', allKeys);
+                  }
+                });
+                console.log('Successfully executed precise localStorage clearing script');
+              } catch (scriptError) {
+                console.warn('Could not clear localStorage for tab:', tab.url, scriptError);
+              }
+            }
+          }
+        } catch (error) {
+          console.error('Error clearing localStorage for Reddit:', error);
+        }
+      }
     }
 
     // Reset timer state
@@ -110,7 +165,7 @@ async function clearHistory() {
       lastCleaned: new Date().toISOString()
     });
 
-    console.log(`Cleared ${totalCleared} history entries`);
+    console.log(`Cleared ${totalCleared} history entries and Reddit recent subreddits data`);
   } catch (error) {
     console.error('Error clearing history:', error);
   }
