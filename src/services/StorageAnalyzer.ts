@@ -26,6 +26,20 @@ export interface DeleteOptions {
   since?: Date;
 }
 
+export interface CleanupRule {
+  domain: string;
+  localStorageKeys: string[];
+  sessionStorageKeys: string[];
+}
+
+export const DEFAULT_CLEANUP_RULES: CleanupRule[] = [
+  {
+    domain: 'reddit.com',
+    localStorageKeys: ['recent-subreddits-store'],
+    sessionStorageKeys: ['recent-subreddits-store'],
+  }
+];
+
 // Helper function to extract domain from URL
 export const extractDomain = (url: string): string => {
   try {
@@ -92,7 +106,6 @@ export default class StorageAnalyzer {
         
         if (item.lastVisitTime) {
           const visitDate = new Date(item.lastVisitTime);
-          // @ts-ignore - Suppress null check error
           if (!result[domain].pages[item.url].lastAccessed || visitDate > result[domain].pages[item.url].lastAccessed) {
             result[domain].pages[item.url].lastAccessed = visitDate;
           }
@@ -183,7 +196,7 @@ export default class StorageAnalyzer {
   }
   
   // Selectively delete browsing data
-  async deleteSelective(options: DeleteOptions): Promise<number> {
+  async deleteSelective(options: DeleteOptions, cleanupRules: CleanupRule[] = []): Promise<number> {
     if (!this.isExtension) {
       console.log('Delete operation only available in extension mode');
       return 0;
@@ -225,7 +238,6 @@ export default class StorageAnalyzer {
             true;
           
           if (shouldDelete) {
-            // @ts-ignore - Suppress Chrome API type error
             await chrome.cookies.remove({
               url: `http${cookie.secure ? 's' : ''}://${domain}${cookie.path}`,
               name: cookie.name,
@@ -238,7 +250,6 @@ export default class StorageAnalyzer {
       // Handle cache deletion
       if (!options.types || options.types.includes('cache')) {
         // Cache deletion requires the browsingData API
-        // @ts-ignore - Suppress Chrome API type error
         if (chrome.browsingData) {
           const removalOptions = {
             "cache": true,
@@ -248,7 +259,6 @@ export default class StorageAnalyzer {
           // Can't easily target by domain
           const since = options.since ? options.since.getTime() : 0;
           
-          // @ts-ignore - Suppress Chrome API type error
           await chrome.browsingData.remove({
             "since": since
           }, removalOptions);
@@ -258,35 +268,32 @@ export default class StorageAnalyzer {
         }
       }
       
-      // Handle localStorage deletion
+      // Handle localStorage deletion using cleanup rules
       if (!options.types || options.types.includes('localStorage')) {
-        // For reddit.com, specifically delete the recent-subreddits-store
-        if (options.domain === 'reddit.com' || options.domain === 'www.reddit.com') {
+        for (const rule of cleanupRules) {
+          const domainMatch = options.domain
+            ? (options.domain === rule.domain || options.domain === `www.${rule.domain}` || options.domain.endsWith(`.${rule.domain}`))
+            : true;
+
+          if (!domainMatch) continue;
+
           try {
-            // Execute script in reddit.com tabs to clear localStorage
             const tabs = await chrome.tabs.query({});
             for (const tab of tabs) {
-              if (tab.url && (tab.url.includes('reddit.com')) && tab.id) {
+              if (tab.url && tab.url.includes(rule.domain) && tab.id) {
                 try {
+                  const keysToRemoveLS = rule.localStorageKeys;
+                  const keysToRemoveSS = rule.sessionStorageKeys;
                   await chrome.scripting.executeScript({
                     target: { tabId: tab.id },
-                    func: () => {
-                      // Remove the specific localStorage item
-                      localStorage.removeItem('recent-subreddits-store');
-                      // Also remove any other reddit-related localStorage items
-                      const keysToRemove = [];
-                      for (let i = 0; i < localStorage.length; i++) {
-                        const key = localStorage.key(i);
-                        if (key && (key.includes('reddit') || key.includes('subreddit'))) {
-                          keysToRemove.push(key);
-                        }
-                      }
-                      keysToRemove.forEach(key => localStorage.removeItem(key));
-                    }
+                    func: (lsKeys: string[], ssKeys: string[]) => {
+                      lsKeys.forEach(key => localStorage.removeItem(key));
+                      ssKeys.forEach(key => sessionStorage.removeItem(key));
+                    },
+                    args: [keysToRemoveLS, keysToRemoveSS]
                   });
                   itemsDeleted++;
                 } catch {
-                  // Tab might not be accessible, continue
                   console.warn('Could not clear localStorage for tab:', tab.url);
                 }
               }
@@ -338,7 +345,6 @@ export default class StorageAnalyzer {
     if (!this.isExtension) return [];
     
     try {
-      // @ts-ignore - Ignore TypeScript errors for Chrome API
       return await chrome.history.search({
         text: '',
         startTime: 0,
@@ -352,11 +358,9 @@ export default class StorageAnalyzer {
   
   // Helper to get cookies
   private async getCookies(): Promise<any[]> {
-    // @ts-ignore - Ignore TypeScript errors for Chrome API
     if (!this.isExtension || !chrome.cookies) return [];
-    
+
     try {
-      // @ts-ignore - Ignore TypeScript errors for Chrome API
       return await chrome.cookies.getAll({});
     } catch (error) {
       console.error('Error fetching cookies:', error);

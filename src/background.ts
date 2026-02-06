@@ -1,10 +1,35 @@
-let settings = {
+interface CleanupRule {
+  domain: string;
+  localStorageKeys: string[];
+  sessionStorageKeys: string[];
+}
+
+const DEFAULT_CLEANUP_RULES: CleanupRule[] = [
+  {
+    domain: 'reddit.com',
+    localStorageKeys: ['recent-subreddits-store'],
+    sessionStorageKeys: ['recent-subreddits-store'],
+  }
+];
+
+interface Settings {
+  isEnabled: boolean;
+  targetSites: string[];
+  autoCleanInterval: number;
+  timerActive: boolean;
+  nextCleaningTime: number;
+  triggerSite: string;
+  cleanupRules: CleanupRule[];
+}
+
+let settings: Settings = {
   isEnabled: false,
   targetSites: [],
   autoCleanInterval: 0,
   timerActive: false,
   nextCleaningTime: 0,
-  triggerSite: ''
+  triggerSite: '',
+  cleanupRules: DEFAULT_CLEANUP_RULES
 };
 
 // Load settings when the service worker starts
@@ -14,20 +39,22 @@ chrome.storage.sync.get([
   'autoCleanInterval',
   'timerActive',
   'nextCleaningTime',
-  'triggerSite'
-], (result) => {
+  'triggerSite',
+  'cleanupRules'
+], (result: { [key: string]: unknown }) => {
   settings = {
-    isEnabled: result.historyManagerEnabled || false,
-    targetSites: result.targetSites || [],
-    autoCleanInterval: result.autoCleanInterval || 0,
-    timerActive: result.timerActive || false,
-    nextCleaningTime: result.nextCleaningTime || 0,
-    triggerSite: result.triggerSite || ''
+    isEnabled: (result.historyManagerEnabled as boolean) || false,
+    targetSites: (result.targetSites as string[]) || [],
+    autoCleanInterval: (result.autoCleanInterval as number) || 0,
+    timerActive: (result.timerActive as boolean) || false,
+    nextCleaningTime: (result.nextCleaningTime as number) || 0,
+    triggerSite: (result.triggerSite as string) || '',
+    cleanupRules: (result.cleanupRules as CleanupRule[]) || DEFAULT_CLEANUP_RULES
   };
 });
 
 // Listen for settings changes
-chrome.storage.onChanged.addListener((changes, namespace) => {
+chrome.storage.onChanged.addListener((changes: { [key: string]: chrome.storage.StorageChange }, namespace: string) => {
   if (namespace === 'sync') {
     if (changes.historyManagerEnabled) settings.isEnabled = changes.historyManagerEnabled.newValue;
     if (changes.targetSites) settings.targetSites = changes.targetSites.newValue;
@@ -35,11 +62,12 @@ chrome.storage.onChanged.addListener((changes, namespace) => {
     if (changes.timerActive) settings.timerActive = changes.timerActive.newValue;
     if (changes.nextCleaningTime) settings.nextCleaningTime = changes.nextCleaningTime.newValue;
     if (changes.triggerSite) settings.triggerSite = changes.triggerSite.newValue;
+    if (changes.cleanupRules) settings.cleanupRules = changes.cleanupRules.newValue;
   }
 });
 
 // Helper function to extract domain
-function extractDomain(url) {
+function extractDomain(url: string): string {
   try {
     return new URL(url).hostname;
   } catch (e) {
@@ -48,19 +76,19 @@ function extractDomain(url) {
 }
 
 // Helper function to check if a domain matches a tracked site
-function isDomainMatch(domain, trackedSite) {
+function isDomainMatch(domain: string, trackedSite: string): boolean {
   const domainLower = domain.toLowerCase();
   const siteLower = trackedSite.toLowerCase();
-  return domainLower === siteLower || 
-         domainLower === `www.${siteLower}` || 
+  return domainLower === siteLower ||
+         domainLower === `www.${siteLower}` ||
          domainLower.endsWith(`.${siteLower}`);
 }
 
 // Function to start the timer
-function startTimer(domain) {
+function startTimer(domain: string): void {
   const now = new Date().getTime();
   const cleanTime = now + (settings.autoCleanInterval * 60 * 1000);
-  
+
   chrome.storage.sync.set({
     nextCleaningTime: cleanTime,
     timerActive: true,
@@ -69,7 +97,7 @@ function startTimer(domain) {
 }
 
 // Function to clear history and other data
-async function clearHistory() {
+async function clearHistory(): Promise<void> {
   try {
     let totalCleared = 0;
 
@@ -88,9 +116,9 @@ async function clearHistory() {
           try {
             const itemHostname = new URL(item.url).hostname.toLowerCase();
             const siteToMatch = site.toLowerCase();
-            
-            if (itemHostname === siteToMatch || 
-                itemHostname === `www.${siteToMatch}` || 
+
+            if (itemHostname === siteToMatch ||
+                itemHostname === `www.${siteToMatch}` ||
                 itemHostname.endsWith(`.${siteToMatch}`)) {
               await chrome.history.deleteUrl({ url: item.url });
               totalCleared++;
@@ -101,60 +129,37 @@ async function clearHistory() {
         }
       }
 
-      // Clear localStorage for Reddit specifically - ONLY the recent subreddits data
-      if (site.includes('reddit.com') || site === 'reddit.com' || site === 'www.reddit.com') {
-        console.log('Attempting to clear ONLY Reddit recent subreddits localStorage for site:', site);
-        try {
-          const tabs = await chrome.tabs.query({});
-          console.log(`Found ${tabs.length} tabs to check for Reddit`);
-          
-          for (const tab of tabs) {
-            if (tab.url && (tab.url.includes('reddit.com') || tab.url.includes('www.reddit.com')) && tab.id) {
-              console.log('Clearing ONLY recent subreddits localStorage for Reddit tab:', tab.url);
-              try {
-                await chrome.scripting.executeScript({
-                  target: { tabId: tab.id },
-                  func: () => {
-                    console.log('Executing PRECISE localStorage clearing script on Reddit tab');
-                    
-                    // Check if the key exists first
-                    const targetKey = 'recent-subreddits-store';
-                    const keyExists = localStorage.getItem(targetKey) !== null;
-                    console.log(`Key "${targetKey}" exists: ${keyExists}`);
-                    
-                    if (keyExists) {
-                      localStorage.removeItem(targetKey);
-                      console.log(`Successfully removed localStorage key: ${targetKey}`);
-                    } else {
-                      console.log(`Key "${targetKey}" not found in localStorage`);
-                    }
-                    
-                    // Also check sessionStorage for the same key
-                    const sessionKeyExists = sessionStorage.getItem(targetKey) !== null;
-                    console.log(`SessionStorage key "${targetKey}" exists: ${sessionKeyExists}`);
-                    
-                    if (sessionKeyExists) {
-                      sessionStorage.removeItem(targetKey);
-                      console.log(`Successfully removed sessionStorage key: ${targetKey}`);
-                    }
-                    
-                    // List all localStorage keys for debugging (without removing them)
-                    const allKeys = [];
-                    for (let i = 0; i < localStorage.length; i++) {
-                      allKeys.push(localStorage.key(i));
-                    }
-                    console.log('All localStorage keys:', allKeys);
-                  }
-                });
-                console.log('Successfully executed precise localStorage clearing script');
-              } catch (scriptError) {
-                console.warn('Could not clear localStorage for tab:', tab.url, scriptError);
-              }
+    }
+
+    // Clear localStorage using configurable cleanup rules
+    for (const rule of settings.cleanupRules) {
+      const ruleMatchesSite = settings.targetSites.some(
+        site => isDomainMatch(site, rule.domain) || isDomainMatch(rule.domain, site)
+      );
+      if (!ruleMatchesSite) continue;
+
+      try {
+        const tabs = await chrome.tabs.query({});
+        for (const tab of tabs) {
+          if (tab.url && tab.url.includes(rule.domain) && tab.id) {
+            try {
+              const lsKeys = rule.localStorageKeys;
+              const ssKeys = rule.sessionStorageKeys;
+              await chrome.scripting.executeScript({
+                target: { tabId: tab.id },
+                func: (localKeys: string[], sessionKeys: string[]) => {
+                  localKeys.forEach(key => localStorage.removeItem(key));
+                  sessionKeys.forEach(key => sessionStorage.removeItem(key));
+                },
+                args: [lsKeys, ssKeys]
+              });
+            } catch (scriptError) {
+              console.warn('Could not clear localStorage for tab:', tab.url, scriptError);
             }
           }
-        } catch (error) {
-          console.error('Error clearing localStorage for Reddit:', error);
         }
+      } catch (error) {
+        console.error(`Error clearing localStorage for ${rule.domain}:`, error);
       }
     }
 
@@ -165,14 +170,14 @@ async function clearHistory() {
       lastCleaned: new Date().toISOString()
     });
 
-    console.log(`Cleared ${totalCleared} history entries and Reddit recent subreddits data`);
+    console.log(`Cleared ${totalCleared} history entries and applied cleanup rules`);
   } catch (error) {
     console.error('Error clearing history:', error);
   }
 }
 
 // Check timer and clear history if needed
-function checkTimer() {
+function checkTimer(): void {
   if (!settings.isEnabled || !settings.timerActive || settings.autoCleanInterval <= 0) {
     return;
   }
@@ -187,7 +192,7 @@ function checkTimer() {
 setInterval(checkTimer, 1000);
 
 // Listen for tab updates
-chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+chrome.tabs.onUpdated.addListener((tabId: number, changeInfo: chrome.tabs.TabChangeInfo, tab: chrome.tabs.Tab) => {
   if (!settings.isEnabled || settings.autoCleanInterval <= 0 || settings.targetSites.length === 0 || settings.timerActive) {
     return;
   }
@@ -195,7 +200,7 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   if (changeInfo.status === 'complete' && tab.url) {
     const domain = extractDomain(tab.url);
     const isTrackedSite = settings.targetSites.some(site => isDomainMatch(domain, site));
-    
+
     if (isTrackedSite) {
       startTimer(domain);
     }
@@ -203,7 +208,7 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
 });
 
 // Listen for tab activation
-chrome.tabs.onActivated.addListener(async (activeInfo) => {
+chrome.tabs.onActivated.addListener(async (activeInfo: chrome.tabs.TabActiveInfo) => {
   if (!settings.isEnabled || settings.autoCleanInterval <= 0 || settings.targetSites.length === 0 || settings.timerActive) {
     return;
   }
@@ -213,7 +218,7 @@ chrome.tabs.onActivated.addListener(async (activeInfo) => {
     if (tab.url) {
       const domain = extractDomain(tab.url);
       const isTrackedSite = settings.targetSites.some(site => isDomainMatch(domain, site));
-      
+
       if (isTrackedSite) {
         startTimer(domain);
       }
@@ -221,4 +226,4 @@ chrome.tabs.onActivated.addListener(async (activeInfo) => {
   } catch (error) {
     console.error('Error handling tab activation:', error);
   }
-}); 
+});

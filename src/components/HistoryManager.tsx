@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Trash2, Power, Plus, X, Clock, Database } from 'lucide-react';
+import { Trash2, Power, Clock, Moon, Sun } from 'lucide-react';
 import BrowsingInsightsDashboard from './BrowsingInsightsDashboard';
-import { extractDomain } from '../services/StorageAnalyzer';
+import { extractDomain, CleanupRule, DEFAULT_CLEANUP_RULES } from '../services/StorageAnalyzer';
+import SiteList from './manager/SiteList';
+import TimerSettings from './manager/TimerSettings';
+import CleanupRulesComponent from './manager/CleanupRules';
 
 const isExtension = typeof chrome !== 'undefined' && chrome.storage && chrome.history;
 
@@ -9,13 +12,18 @@ const isExtension = typeof chrome !== 'undefined' && chrome.storage && chrome.hi
 const isDomainMatch = (domain: string, trackedSite: string): boolean => {
   const domainLower = domain.toLowerCase();
   const siteLower = trackedSite.toLowerCase();
-  
-  return domainLower === siteLower || 
-         domainLower === `www.${siteLower}` || 
+
+  return domainLower === siteLower ||
+         domainLower === `www.${siteLower}` ||
          domainLower.endsWith(`.${siteLower}`);
 };
 
-export default function HistoryManager() {
+interface HistoryManagerProps {
+  darkMode: boolean;
+  onToggleDarkMode: () => void;
+}
+
+export default function HistoryManager({ darkMode, onToggleDarkMode }: HistoryManagerProps) {
   const [isEnabled, setIsEnabled] = useState(false);
   const [targetSites, setTargetSites] = useState<string[]>([]);
   const [newSite, setNewSite] = useState('');
@@ -26,12 +34,13 @@ export default function HistoryManager() {
   const [timerActive, setTimerActive] = useState(false);
   const [triggerSite, setTriggerSite] = useState<string>('');
   const [nextCleaningTime, setNextCleaningTime] = useState<number>(0);
+  const [cleanupRules, setCleanupRules] = useState<CleanupRule[]>(DEFAULT_CLEANUP_RULES);
 
   // Load saved settings
   useEffect(() => {
     if (isExtension) {
       // Load saved settings from chrome.storage
-      chrome.storage.sync.get(['targetSites', 'historyManagerEnabled', 'autoCleanInterval', 'lastCleaned', 'timerActive', 'nextCleaningTime', 'triggerSite'], (result: any) => {
+      chrome.storage.sync.get(['targetSites', 'historyManagerEnabled', 'autoCleanInterval', 'lastCleaned', 'timerActive', 'nextCleaningTime', 'triggerSite', 'cleanupRules'], (result: any) => {
         if (result.targetSites) {
           setTargetSites(result.targetSites);
         }
@@ -53,6 +62,9 @@ export default function HistoryManager() {
         if (result.triggerSite) {
           setTriggerSite(result.triggerSite);
         }
+        if (result.cleanupRules) {
+          setCleanupRules(result.cleanupRules);
+        }
       });
     } else {
       // Load from localStorage when running in development
@@ -63,7 +75,8 @@ export default function HistoryManager() {
       const savedTimerActive = localStorage.getItem('timerActive');
       const savedNextCleaningTime = localStorage.getItem('nextCleaningTime');
       const savedTriggerSite = localStorage.getItem('triggerSite');
-      
+      const savedCleanupRules = localStorage.getItem('cleanupRules');
+
       if (savedSites) {
         setTargetSites(JSON.parse(savedSites));
       }
@@ -85,6 +98,9 @@ export default function HistoryManager() {
       if (savedTriggerSite) {
         setTriggerSite(JSON.parse(savedTriggerSite));
       }
+      if (savedCleanupRules) {
+        setCleanupRules(JSON.parse(savedCleanupRules));
+      }
     }
   }, []);
 
@@ -99,7 +115,8 @@ export default function HistoryManager() {
         lastCleaned,
         timerActive,
         nextCleaningTime,
-        triggerSite
+        triggerSite,
+        cleanupRules
       });
     } else {
       // Save to localStorage when running in development
@@ -110,8 +127,9 @@ export default function HistoryManager() {
       localStorage.setItem('timerActive', JSON.stringify(timerActive));
       localStorage.setItem('nextCleaningTime', JSON.stringify(nextCleaningTime));
       localStorage.setItem('triggerSite', JSON.stringify(triggerSite));
+      localStorage.setItem('cleanupRules', JSON.stringify(cleanupRules));
     }
-  }, [targetSites, isEnabled, autoCleanInterval, lastCleaned, timerActive, nextCleaningTime, triggerSite]);
+  }, [targetSites, isEnabled, autoCleanInterval, lastCleaned, timerActive, nextCleaningTime, triggerSite, cleanupRules]);
 
   // Automatic history cleaning timer display
   useEffect(() => {
@@ -130,7 +148,7 @@ export default function HistoryManager() {
       const timeLeft = nextCleaningTime - now;
       const minutes = Math.floor(timeLeft / (60 * 1000));
       const seconds = Math.floor((timeLeft % (60 * 1000)) / 1000);
-      
+
       setTimeRemaining(`${minutes}m ${seconds}s`);
     };
 
@@ -154,9 +172,17 @@ export default function HistoryManager() {
 
   const removeSite = (site: string) => {
     setTargetSites(targetSites.filter(s => s !== site));
-    
+
     // If we remove a site that triggered the timer, reset the timer
     if (site === triggerSite) {
+      resetTimer();
+    }
+  };
+
+  const handleIntervalChange = (value: number) => {
+    setAutoCleanInterval(value);
+    // Reset timer if interval changes
+    if (timerActive) {
       resetTimer();
     }
   };
@@ -174,7 +200,7 @@ export default function HistoryManager() {
       // Clear data for each target site using enhanced deletion
       for (const site of targetSites) {
         console.log(`Processing site: ${site}`);
-        
+
         // Clear history
         const historyItems = await chrome.history.search({
           text: site,
@@ -190,9 +216,9 @@ export default function HistoryManager() {
             try {
               const itemHostname = new URL(item.url).hostname.toLowerCase();
               const siteToMatch = site.toLowerCase();
-              
-              if (itemHostname === siteToMatch || 
-                  itemHostname === `www.${siteToMatch}` || 
+
+              if (itemHostname === siteToMatch ||
+                  itemHostname === `www.${siteToMatch}` ||
                   itemHostname.endsWith(`.${siteToMatch}`)) {
                 await chrome.history.deleteUrl({ url: item.url });
                 totalCleared++;
@@ -203,70 +229,44 @@ export default function HistoryManager() {
           }
         }
 
-        // Clear localStorage for Reddit specifically - ONLY the recent subreddits data
-        if (site.includes('reddit.com') || site === 'reddit.com' || site === 'www.reddit.com') {
-          console.log('Clearing ONLY Reddit recent subreddits localStorage for site:', site);
+      }
+
+      // Clear localStorage using cleanup rules
+      for (const rule of cleanupRules) {
+        if (targetSites.some(site => isDomainMatch(site, rule.domain) || isDomainMatch(rule.domain, site))) {
           try {
             const tabs = await chrome.tabs.query({});
-            console.log(`Found ${tabs.length} tabs to check for Reddit`);
-            
             for (const tab of tabs) {
-              if (tab.url && (tab.url.includes('reddit.com') || tab.url.includes('www.reddit.com')) && tab.id) {
-                console.log('Clearing ONLY recent subreddits localStorage for Reddit tab:', tab.url);
+              if (tab.url && tab.url.includes(rule.domain) && tab.id) {
                 try {
+                  const lsKeys = rule.localStorageKeys;
+                  const ssKeys = rule.sessionStorageKeys;
                   await chrome.scripting.executeScript({
                     target: { tabId: tab.id },
-                    func: () => {
-                      console.log('Executing PRECISE localStorage clearing script on Reddit tab');
-                      
-                      // Check if the key exists first
-                      const targetKey = 'recent-subreddits-store';
-                      const keyExists = localStorage.getItem(targetKey) !== null;
-                      console.log(`Key "${targetKey}" exists: ${keyExists}`);
-                      
-                      if (keyExists) {
-                        localStorage.removeItem(targetKey);
-                        console.log(`Successfully removed localStorage key: ${targetKey}`);
-                      } else {
-                        console.log(`Key "${targetKey}" not found in localStorage`);
-                      }
-                      
-                      // Also check sessionStorage for the same key
-                      const sessionKeyExists = sessionStorage.getItem(targetKey) !== null;
-                      console.log(`SessionStorage key "${targetKey}" exists: ${sessionKeyExists}`);
-                      
-                      if (sessionKeyExists) {
-                        sessionStorage.removeItem(targetKey);
-                        console.log(`Successfully removed sessionStorage key: ${targetKey}`);
-                      }
-                      
-                      // List all localStorage keys for debugging (without removing them)
-                      const allKeys = [];
-                      for (let i = 0; i < localStorage.length; i++) {
-                        allKeys.push(localStorage.key(i));
-                      }
-                      console.log('All localStorage keys:', allKeys);
-                    }
+                    func: (localKeys: string[], sessionKeys: string[]) => {
+                      localKeys.forEach(key => localStorage.removeItem(key));
+                      sessionKeys.forEach(key => sessionStorage.removeItem(key));
+                    },
+                    args: [lsKeys, ssKeys]
                   });
-                  console.log('Successfully executed precise localStorage clearing script');
                 } catch (scriptError) {
                   console.warn('Could not clear localStorage for tab:', tab.url, scriptError);
                 }
               }
             }
           } catch (error) {
-            console.error('Error clearing localStorage for Reddit:', error);
+            console.error(`Error clearing localStorage for ${rule.domain}:`, error);
           }
         }
       }
-      
+
       // Update last cleaned time and reset timer
       const now = new Date();
       setLastCleaned(now.toISOString());
       resetTimer();
-      
-      console.log(`Total history entries cleared: ${totalCleared} (plus Reddit recent subreddits localStorage)`);
-      alert(`Enhanced cleaning completed: ${totalCleared} history entries removed, plus Reddit recent subreddits data cleared.`);
+
+      console.log(`Total history entries cleared: ${totalCleared} (plus storage cleanup rules applied)`);
+      alert(`Enhanced cleaning completed: ${totalCleared} history entries removed, plus storage cleanup rules applied.`);
     } catch (error: unknown) {
       console.error('Error clearing history:', error);
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -285,14 +285,14 @@ export default function HistoryManager() {
   };
 
   return (
-    <div className={`bg-white rounded-lg shadow-lg ${activeTab === 'insights' ? 'w-[800px]' : 'w-96'}`}>
+    <div className={`bg-white dark:bg-gray-800 rounded-lg shadow-lg dark:shadow-gray-900/20 ${activeTab === 'insights' ? 'w-[800px]' : 'w-96'}`}>
       {/* Tabs */}
-      <div className="flex border-b">
+      <div className="flex border-b dark:border-gray-600">
         <button
           className={`flex-1 py-3 text-center font-medium ${
-            activeTab === 'manager' 
-              ? 'text-blue-600 border-b-2 border-blue-600' 
-              : 'text-gray-500 hover:text-gray-700'
+            activeTab === 'manager'
+              ? 'text-blue-600 border-b-2 border-blue-600'
+              : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
           }`}
           onClick={() => setActiveTab('manager')}
         >
@@ -300,9 +300,9 @@ export default function HistoryManager() {
         </button>
         <button
           className={`flex-1 py-3 text-center font-medium ${
-            activeTab === 'insights' 
-              ? 'text-blue-600 border-b-2 border-blue-600' 
-              : 'text-gray-500 hover:text-gray-700'
+            activeTab === 'insights'
+              ? 'text-blue-600 border-b-2 border-blue-600'
+              : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
           }`}
           onClick={() => setActiveTab('insights')}
         >
@@ -314,116 +314,56 @@ export default function HistoryManager() {
       {activeTab === 'manager' && (
         <div className="p-6">
           <div className="flex items-center justify-between mb-6">
-            <h1 className="text-2xl font-bold text-gray-800">History Manager</h1>
-            <button
-              onClick={() => {
-                const newState = !isEnabled;
-                setIsEnabled(newState);
-                if (!newState) {
-                  resetTimer();
-                }
-              }}
-              className={`p-2 rounded-full transition-colors ${
-                isEnabled ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-600'
-              }`}
-            >
-              <Power size={20} />
-            </button>
-          </div>
-
-          <div className="mb-6">
-            <div className="flex gap-2 mb-4">
-              <input
-                type="text"
-                value={newSite}
-                onChange={(e) => setNewSite(e.target.value)}
-                placeholder="Enter domain (e.g., example.com)"
-                className="flex-1 px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
+            <h1 className="text-2xl font-bold text-gray-800 dark:text-gray-100">History Manager</h1>
+            <div className="flex items-center gap-2">
               <button
-                onClick={addSite}
-                className="bg-blue-500 text-white p-2 rounded-lg hover:bg-blue-600 transition-colors"
+                onClick={onToggleDarkMode}
+                className="p-2 rounded-full transition-colors bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-500"
+                title={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
               >
-                <Plus size={20} />
+                {darkMode ? <Sun size={20} /> : <Moon size={20} />}
+              </button>
+              <button
+                onClick={() => {
+                  const newState = !isEnabled;
+                  setIsEnabled(newState);
+                  if (!newState) {
+                    resetTimer();
+                  }
+                }}
+                className={`p-2 rounded-full transition-colors ${
+                  isEnabled ? 'bg-green-500 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-400'
+                }`}
+              >
+                <Power size={20} />
               </button>
             </div>
-
-            <div className="space-y-2">
-              {targetSites.map((site) => (
-                <div
-                  key={site}
-                  className={`flex items-center justify-between p-3 rounded-lg ${
-                    site === triggerSite && timerActive 
-                      ? 'bg-blue-50 border border-blue-200' 
-                      : 'bg-gray-50'
-                  }`}
-                >
-                  <div className="flex items-center">
-                    <span className="text-gray-700">{site}</span>
-                    {site === triggerSite && timerActive && (
-                      <span className="ml-2 px-2 py-0.5 bg-blue-100 text-blue-800 text-xs rounded-full">
-                        Active
-                      </span>
-                    )}
-                  </div>
-                  <button
-                    onClick={() => removeSite(site)}
-                    className="text-red-500 hover:text-red-600 transition-colors"
-                  >
-                    <X size={18} />
-                  </button>
-                </div>
-              ))}
-            </div>
           </div>
 
-          {/* Auto Clean Timer Settings */}
-          <div className="mb-4">
-            <div className="flex items-center justify-between mb-2">
-              <label className="font-medium text-gray-700 flex items-center gap-1">
-                <Clock size={16} />
-                Auto-Clean Timer (minutes)
-              </label>
-              {timeRemaining && (
-                <div className="text-sm text-blue-600 font-medium">
-                  Next clean: {timeRemaining}
-                </div>
-              )}
-            </div>
-            
-            <div className="mb-2 text-sm text-gray-600">
-              Timer will start when you visit one of the tracked sites
-              {triggerSite && timerActive && (
-                <span className="block mt-1 text-blue-600">
-                  Currently triggered by: {triggerSite}
-                </span>
-              )}
-            </div>
-            
-            <input
-              type="range"
-              min="0"
-              max="120"
-              step="5"
-              value={autoCleanInterval}
-              onChange={(e) => {
-                setAutoCleanInterval(parseInt(e.target.value));
-                // Reset timer if interval changes
-                if (timerActive) {
-                  resetTimer();
-                }
-              }}
-              className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
-            />
-            <div className="flex justify-between text-sm text-gray-500 mt-1">
-              <span>Off</span>
-              <span>{autoCleanInterval > 0 ? `${autoCleanInterval} min` : 'Disabled'}</span>
-              <span>120 min</span>
-            </div>
-            <div className="text-xs text-gray-500 mt-1">
-              Last cleaned: {lastCleaned === 'Never' ? 'Never' : new Date(lastCleaned).toLocaleString()}
-            </div>
-          </div>
+          <SiteList
+            targetSites={targetSites}
+            newSite={newSite}
+            onNewSiteChange={setNewSite}
+            onAddSite={addSite}
+            onRemoveSite={removeSite}
+            triggerSite={triggerSite}
+            timerActive={timerActive}
+          />
+
+          <TimerSettings
+            autoCleanInterval={autoCleanInterval}
+            onIntervalChange={handleIntervalChange}
+            timeRemaining={timeRemaining}
+            triggerSite={triggerSite}
+            timerActive={timerActive}
+            lastCleaned={lastCleaned}
+            onResetTimer={resetTimer}
+          />
+
+          <CleanupRulesComponent
+            cleanupRules={cleanupRules}
+            onRulesChange={setCleanupRules}
+          />
 
           <div className="flex gap-2">
             <button
@@ -432,17 +372,17 @@ export default function HistoryManager() {
               className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-lg transition-colors ${
                 isEnabled && targetSites.length > 0
                   ? 'bg-red-500 text-white hover:bg-red-600'
-                  : 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                  : 'bg-gray-200 dark:bg-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed'
               }`}
             >
               <Trash2 size={20} />
               Clear History Now
             </button>
-            
+
             {timerActive && (
               <button
                 onClick={resetTimer}
-                className="flex-1 flex items-center justify-center gap-2 py-3 rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors"
+                className="flex-1 flex items-center justify-center gap-2 py-3 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
               >
                 <Clock size={20} />
                 Cancel Timer
