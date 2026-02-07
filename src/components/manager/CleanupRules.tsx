@@ -1,4 +1,3 @@
-import React from 'react';
 import { Database, X } from 'lucide-react';
 import { CleanupRule } from '../../services/StorageAnalyzer';
 
@@ -7,10 +6,10 @@ interface CleanupRulesProps {
   onRulesChange: (rules: CleanupRule[]) => void;
 }
 
-const CleanupRules: React.FC<CleanupRulesProps> = ({
+function CleanupRules({
   cleanupRules,
   onRulesChange,
-}) => {
+}: CleanupRulesProps) {
   return (
     <div className="mb-4">
       <label className="font-medium text-gray-700 dark:text-gray-300 flex items-center gap-1 mb-2">
@@ -40,6 +39,6 @@ const CleanupRules: React.FC<CleanupRulesProps> = ({
       </div>
     </div>
   );
-};
+}
 
 export default CleanupRules;

@@ -1,4 +1,3 @@
-import React from 'react';
 import { Plus, X } from 'lucide-react';
 
 interface SiteListProps {
@@ -11,7 +10,7 @@ interface SiteListProps {
   timerActive: boolean;
 }
 
-const SiteList: React.FC<SiteListProps> = ({
+function SiteList({
   targetSites,
   newSite,
   onNewSiteChange,
@@ -19,7 +18,7 @@ const SiteList: React.FC<SiteListProps> = ({
   onRemoveSite,
   triggerSite,
   timerActive,
-}) => {
+}: SiteListProps) {
   return (
     <div className="mb-6">
       <div className="flex gap-2 mb-4">
@@ -67,6 +66,6 @@ const SiteList: React.FC<SiteListProps> = ({
       </div>
     </div>
   );
-};
+}
 
 export default SiteList;

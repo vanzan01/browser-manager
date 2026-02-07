@@ -1,22 +1,18 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Trash2, Power, Clock, Moon, Sun } from 'lucide-react';
 import BrowsingInsightsDashboard from './BrowsingInsightsDashboard';
-import { extractDomain, CleanupRule, DEFAULT_CLEANUP_RULES } from '../services/StorageAnalyzer';
+import { CleanupRule, DEFAULT_CLEANUP_RULES } from '../services/StorageAnalyzer';
 import SiteList from './manager/SiteList';
 import TimerSettings from './manager/TimerSettings';
 import CleanupRulesComponent from './manager/CleanupRules';
 
 const isExtension = typeof chrome !== 'undefined' && chrome.storage && chrome.history;
 
-// Helper function to check if a domain matches a tracked site
-const isDomainMatch = (domain: string, trackedSite: string): boolean => {
-  const domainLower = domain.toLowerCase();
-  const siteLower = trackedSite.toLowerCase();
-
-  return domainLower === siteLower ||
-         domainLower === `www.${siteLower}` ||
-         domainLower.endsWith(`.${siteLower}`);
-};
+function isDomainMatch(domain: string, trackedSite: string): boolean {
+  const d = domain.toLowerCase();
+  const s = trackedSite.toLowerCase();
+  return d === s || d === `www.${s}` || d.endsWith(`.${s}`);
+}
 
 interface HistoryManagerProps {
   darkMode: boolean;
@@ -36,257 +32,172 @@ export default function HistoryManager({ darkMode, onToggleDarkMode }: HistoryMa
   const [nextCleaningTime, setNextCleaningTime] = useState<number>(0);
   const [cleanupRules, setCleanupRules] = useState<CleanupRule[]>(DEFAULT_CLEANUP_RULES);
 
-  // Load saved settings
+  const settingsMap: Record<string, [() => any, (v: any) => void]> = {
+    targetSites: [() => targetSites, setTargetSites],
+    historyManagerEnabled: [() => isEnabled, setIsEnabled],
+    autoCleanInterval: [() => autoCleanInterval, setAutoCleanInterval],
+    lastCleaned: [() => lastCleaned, setLastCleaned],
+    timerActive: [() => timerActive, setTimerActive],
+    nextCleaningTime: [() => nextCleaningTime, setNextCleaningTime],
+    triggerSite: [() => triggerSite, setTriggerSite],
+    cleanupRules: [() => cleanupRules, setCleanupRules],
+  };
+
   useEffect(() => {
+    const keys = Object.keys(settingsMap);
+
     if (isExtension) {
-      // Load saved settings from chrome.storage
-      chrome.storage.sync.get(['targetSites', 'historyManagerEnabled', 'autoCleanInterval', 'lastCleaned', 'timerActive', 'nextCleaningTime', 'triggerSite', 'cleanupRules'], (result: any) => {
-        if (result.targetSites) {
-          setTargetSites(result.targetSites);
-        }
-        if (result.historyManagerEnabled !== undefined) {
-          setIsEnabled(result.historyManagerEnabled);
-        }
-        if (result.autoCleanInterval !== undefined) {
-          setAutoCleanInterval(result.autoCleanInterval);
-        }
-        if (result.lastCleaned) {
-          setLastCleaned(result.lastCleaned);
-        }
-        if (result.timerActive !== undefined) {
-          setTimerActive(result.timerActive);
-        }
-        if (result.nextCleaningTime) {
-          setNextCleaningTime(result.nextCleaningTime);
-        }
-        if (result.triggerSite) {
-          setTriggerSite(result.triggerSite);
-        }
-        if (result.cleanupRules) {
-          setCleanupRules(result.cleanupRules);
+      chrome.storage.sync.get(keys, (result: any) => {
+        for (const key of keys) {
+          if (result[key] !== undefined) {
+            settingsMap[key][1](result[key]);
+          }
         }
       });
     } else {
-      // Load from localStorage when running in development
-      const savedSites = localStorage.getItem('targetSites');
-      const savedEnabled = localStorage.getItem('historyManagerEnabled');
-      const savedInterval = localStorage.getItem('autoCleanInterval');
-      const savedLastCleaned = localStorage.getItem('lastCleaned');
-      const savedTimerActive = localStorage.getItem('timerActive');
-      const savedNextCleaningTime = localStorage.getItem('nextCleaningTime');
-      const savedTriggerSite = localStorage.getItem('triggerSite');
-      const savedCleanupRules = localStorage.getItem('cleanupRules');
-
-      if (savedSites) {
-        setTargetSites(JSON.parse(savedSites));
-      }
-      if (savedEnabled) {
-        setIsEnabled(JSON.parse(savedEnabled));
-      }
-      if (savedInterval) {
-        setAutoCleanInterval(JSON.parse(savedInterval));
-      }
-      if (savedLastCleaned) {
-        setLastCleaned(JSON.parse(savedLastCleaned));
-      }
-      if (savedTimerActive) {
-        setTimerActive(JSON.parse(savedTimerActive));
-      }
-      if (savedNextCleaningTime) {
-        setNextCleaningTime(JSON.parse(savedNextCleaningTime));
-      }
-      if (savedTriggerSite) {
-        setTriggerSite(JSON.parse(savedTriggerSite));
-      }
-      if (savedCleanupRules) {
-        setCleanupRules(JSON.parse(savedCleanupRules));
+      for (const key of keys) {
+        const stored = localStorage.getItem(key);
+        if (stored) {
+          settingsMap[key][1](JSON.parse(stored));
+        }
       }
     }
   }, []);
 
-  // Save settings when they change
   useEffect(() => {
     if (isExtension) {
-      // Save settings to chrome.storage when they change
-      chrome.storage.sync.set({
-        targetSites,
-        historyManagerEnabled: isEnabled,
-        autoCleanInterval,
-        lastCleaned,
-        timerActive,
-        nextCleaningTime,
-        triggerSite,
-        cleanupRules
-      });
+      const data: Record<string, any> = {};
+      for (const key of Object.keys(settingsMap)) {
+        data[key] = settingsMap[key][0]();
+      }
+      chrome.storage.sync.set(data);
     } else {
-      // Save to localStorage when running in development
-      localStorage.setItem('targetSites', JSON.stringify(targetSites));
-      localStorage.setItem('historyManagerEnabled', JSON.stringify(isEnabled));
-      localStorage.setItem('autoCleanInterval', JSON.stringify(autoCleanInterval));
-      localStorage.setItem('lastCleaned', JSON.stringify(lastCleaned));
-      localStorage.setItem('timerActive', JSON.stringify(timerActive));
-      localStorage.setItem('nextCleaningTime', JSON.stringify(nextCleaningTime));
-      localStorage.setItem('triggerSite', JSON.stringify(triggerSite));
-      localStorage.setItem('cleanupRules', JSON.stringify(cleanupRules));
+      for (const key of Object.keys(settingsMap)) {
+        localStorage.setItem(key, JSON.stringify(settingsMap[key][0]()));
+      }
     }
   }, [targetSites, isEnabled, autoCleanInterval, lastCleaned, timerActive, nextCleaningTime, triggerSite, cleanupRules]);
 
-  // Automatic history cleaning timer display
   useEffect(() => {
     if (!isEnabled || autoCleanInterval <= 0 || targetSites.length === 0 || !timerActive) {
       setTimeRemaining('');
-      return () => {};
+      return;
     }
 
-    // Update time remaining display
-    const updateTimeRemaining = () => {
-      const now = new Date().getTime();
-      if (now >= nextCleaningTime) {
-        return;
-      }
+    function updateTimeRemaining() {
+      const now = Date.now();
+      if (now >= nextCleaningTime) return;
 
       const timeLeft = nextCleaningTime - now;
-      const minutes = Math.floor(timeLeft / (60 * 1000));
-      const seconds = Math.floor((timeLeft % (60 * 1000)) / 1000);
-
+      const minutes = Math.floor(timeLeft / 60000);
+      const seconds = Math.floor((timeLeft % 60000) / 1000);
       setTimeRemaining(`${minutes}m ${seconds}s`);
-    };
+    }
 
-    // Initial update
     updateTimeRemaining();
-
-    // Set interval to update countdown display
-    const intervalId = setInterval(() => {
-      updateTimeRemaining();
-    }, 1000);
-
+    const intervalId = setInterval(updateTimeRemaining, 1000);
     return () => clearInterval(intervalId);
   }, [isEnabled, autoCleanInterval, targetSites, timerActive, nextCleaningTime]);
 
-  const addSite = () => {
+  function addSite() {
     if (newSite && !targetSites.includes(newSite)) {
       setTargetSites([...targetSites, newSite]);
       setNewSite('');
     }
-  };
+  }
 
-  const removeSite = (site: string) => {
+  function removeSite(site: string) {
     setTargetSites(targetSites.filter(s => s !== site));
-
-    // If we remove a site that triggered the timer, reset the timer
     if (site === triggerSite) {
       resetTimer();
     }
-  };
+  }
 
-  const handleIntervalChange = (value: number) => {
+  function handleIntervalChange(value: number) {
     setAutoCleanInterval(value);
-    // Reset timer if interval changes
     if (timerActive) {
       resetTimer();
     }
-  };
+  }
 
-  const clearHistory = async () => {
+  async function clearHistory() {
     try {
-      if (!isExtension) {
-        console.log('History clearing is only available in extension mode');
-        return;
-      }
+      if (!isExtension) return;
 
-      console.log('Starting enhanced history clearing for sites:', targetSites);
       let totalCleared = 0;
 
-      // Clear data for each target site using enhanced deletion
       for (const site of targetSites) {
-        console.log(`Processing site: ${site}`);
-
-        // Clear history
         const historyItems = await chrome.history.search({
           text: site,
           startTime: 0,
-          endTime: new Date().getTime(),
+          endTime: Date.now(),
           maxResults: 10000
         });
 
-        console.log(`Found ${historyItems.length} history items for ${site}`);
-
         for (const item of historyItems) {
-          if (item.url) {
-            try {
-              const itemHostname = new URL(item.url).hostname.toLowerCase();
-              const siteToMatch = site.toLowerCase();
-
-              if (itemHostname === siteToMatch ||
-                  itemHostname === `www.${siteToMatch}` ||
-                  itemHostname.endsWith(`.${siteToMatch}`)) {
-                await chrome.history.deleteUrl({ url: item.url });
-                totalCleared++;
-              }
-            } catch (urlError) {
-              console.error('Error parsing URL:', item.url, urlError);
-            }
-          }
-        }
-
-      }
-
-      // Clear localStorage using cleanup rules
-      for (const rule of cleanupRules) {
-        if (targetSites.some(site => isDomainMatch(site, rule.domain) || isDomainMatch(rule.domain, site))) {
+          if (!item.url) continue;
           try {
-            const tabs = await chrome.tabs.query({});
-            for (const tab of tabs) {
-              if (tab.url && tab.url.includes(rule.domain) && tab.id) {
-                try {
-                  const lsKeys = rule.localStorageKeys;
-                  const ssKeys = rule.sessionStorageKeys;
-                  await chrome.scripting.executeScript({
-                    target: { tabId: tab.id },
-                    func: (localKeys: string[], sessionKeys: string[]) => {
-                      localKeys.forEach(key => localStorage.removeItem(key));
-                      sessionKeys.forEach(key => sessionStorage.removeItem(key));
-                    },
-                    args: [lsKeys, ssKeys]
-                  });
-                } catch (scriptError) {
-                  console.warn('Could not clear localStorage for tab:', tab.url, scriptError);
-                }
-              }
+            const itemHostname = new URL(item.url).hostname;
+            if (isDomainMatch(itemHostname, site)) {
+              await chrome.history.deleteUrl({ url: item.url });
+              totalCleared++;
             }
-          } catch (error) {
-            console.error(`Error clearing localStorage for ${rule.domain}:`, error);
+          } catch (urlError) {
+            console.error('Error parsing URL:', item.url, urlError);
           }
         }
       }
 
-      // Update last cleaned time and reset timer
-      const now = new Date();
-      setLastCleaned(now.toISOString());
+      for (const rule of cleanupRules) {
+        const ruleMatchesSite = targetSites.some(
+          site => isDomainMatch(site, rule.domain) || isDomainMatch(rule.domain, site)
+        );
+        if (!ruleMatchesSite) continue;
+
+        try {
+          const tabs = await chrome.tabs.query({});
+          for (const tab of tabs) {
+            if (!tab.url || !tab.url.includes(rule.domain) || !tab.id) continue;
+            try {
+              await chrome.scripting.executeScript({
+                target: { tabId: tab.id },
+                func: (localKeys: string[], sessionKeys: string[]) => {
+                  localKeys.forEach(key => localStorage.removeItem(key));
+                  sessionKeys.forEach(key => sessionStorage.removeItem(key));
+                },
+                args: [rule.localStorageKeys, rule.sessionStorageKeys]
+              });
+            } catch (scriptError) {
+              console.warn('Could not clear localStorage for tab:', tab.url, scriptError);
+            }
+          }
+        } catch (error) {
+          console.error(`Error clearing localStorage for ${rule.domain}:`, error);
+        }
+      }
+
+      setLastCleaned(new Date().toISOString());
       resetTimer();
 
-      console.log(`Total history entries cleared: ${totalCleared} (plus storage cleanup rules applied)`);
       alert(`Enhanced cleaning completed: ${totalCleared} history entries removed, plus storage cleanup rules applied.`);
     } catch (error: unknown) {
       console.error('Error clearing history:', error);
       const errorMessage = error instanceof Error ? error.message : String(error);
       alert(`Error clearing history: ${errorMessage}`);
     }
-  };
+  }
 
-  // Function to reset the timer
-  const resetTimer = () => {
+  function resetTimer() {
     if (isExtension) {
       chrome.storage.sync.set({
         timerActive: false,
         triggerSite: ''
       });
     }
-  };
+  }
 
   return (
     <div className={`bg-white dark:bg-gray-800 rounded-lg shadow-lg dark:shadow-gray-900/20 ${activeTab === 'insights' ? 'w-[800px]' : 'w-96'}`}>
-      {/* Tabs */}
       <div className="flex border-b dark:border-gray-600">
         <button
           className={`flex-1 py-3 text-center font-medium ${
@@ -310,7 +221,6 @@ export default function HistoryManager({ darkMode, onToggleDarkMode }: HistoryMa
         </button>
       </div>
 
-      {/* Manager Tab */}
       {activeTab === 'manager' && (
         <div className="p-6">
           <div className="flex items-center justify-between mb-6">
@@ -392,7 +302,6 @@ export default function HistoryManager({ darkMode, onToggleDarkMode }: HistoryMa
         </div>
       )}
 
-      {/* Insights Tab */}
       {activeTab === 'insights' && (
         <BrowsingInsightsDashboard />
       )}

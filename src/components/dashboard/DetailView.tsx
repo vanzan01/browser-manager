@@ -1,4 +1,3 @@
-import React from 'react';
 import { DomainStorageMap } from '../../services/StorageAnalyzer';
 import { formatBytes } from '../../utils/format';
 import { Trash2 } from 'lucide-react';
@@ -10,46 +9,35 @@ interface DetailViewProps {
   onUrlClear: (domain: string, url: string) => void;
 }
 
-const DetailView: React.FC<DetailViewProps> = ({
+const metricCards = [
+  { label: 'Total', key: 'total' as const, color: 'text-gray-800 dark:text-gray-100' },
+  { label: 'History', key: 'history' as const, color: 'text-blue-600' },
+  { label: 'Cache', key: 'cache' as const, color: 'text-purple-600' },
+  { label: 'Cookies', key: 'cookies' as const, color: 'text-yellow-600' },
+];
+
+function DetailView({
   selectedDomain,
   domainData,
   onDomainClear,
   onUrlClear,
-}) => {
-  // Get domain pages for detail view
+}: DetailViewProps) {
   const selectedDomainPages = Object.entries(domainData[selectedDomain].pages)
     .sort(([, a], [, b]) => b.total - a.total);
 
   return (
     <>
-      {/* Domain metrics */}
       <div className="mb-6 bg-gray-50 dark:bg-gray-700 p-4 rounded-lg">
         <h2 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-2">Domain Storage</h2>
         <div className="grid grid-cols-4 gap-4 mb-3">
-          <div className="bg-white dark:bg-gray-800 p-3 rounded-lg shadow-sm dark:shadow-gray-900/20">
-            <div className="text-sm text-gray-500 dark:text-gray-400">Total</div>
-            <div className="text-lg font-bold text-gray-800 dark:text-gray-100">
-              {formatBytes(domainData[selectedDomain].metrics.total)}
+          {metricCards.map(({ label, key, color }) => (
+            <div key={key} className="bg-white dark:bg-gray-800 p-3 rounded-lg shadow-sm dark:shadow-gray-900/20">
+              <div className="text-sm text-gray-500 dark:text-gray-400">{label}</div>
+              <div className={`text-lg font-bold ${color}`}>
+                {formatBytes(domainData[selectedDomain].metrics[key])}
+              </div>
             </div>
-          </div>
-          <div className="bg-white dark:bg-gray-800 p-3 rounded-lg shadow-sm dark:shadow-gray-900/20">
-            <div className="text-sm text-gray-500 dark:text-gray-400">History</div>
-            <div className="text-lg font-bold text-blue-600">
-              {formatBytes(domainData[selectedDomain].metrics.history)}
-            </div>
-          </div>
-          <div className="bg-white dark:bg-gray-800 p-3 rounded-lg shadow-sm dark:shadow-gray-900/20">
-            <div className="text-sm text-gray-500 dark:text-gray-400">Cache</div>
-            <div className="text-lg font-bold text-purple-600">
-              {formatBytes(domainData[selectedDomain].metrics.cache)}
-            </div>
-          </div>
-          <div className="bg-white dark:bg-gray-800 p-3 rounded-lg shadow-sm dark:shadow-gray-900/20">
-            <div className="text-sm text-gray-500 dark:text-gray-400">Cookies</div>
-            <div className="text-lg font-bold text-yellow-600">
-              {formatBytes(domainData[selectedDomain].metrics.cookies)}
-            </div>
-          </div>
+          ))}
         </div>
         <button
           className="w-full py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg flex items-center justify-center gap-2"
@@ -60,7 +48,6 @@ const DetailView: React.FC<DetailViewProps> = ({
         </button>
       </div>
 
-      {/* Page List */}
       <div>
         <h2 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-3">Pages</h2>
 
@@ -92,6 +79,6 @@ const DetailView: React.FC<DetailViewProps> = ({
       </div>
     </>
   );
-};
+}
 
 export default DetailView;

@@ -1,4 +1,3 @@
-import React from 'react';
 import { Clock } from 'lucide-react';
 
 interface TimerSettingsProps {
@@ -11,7 +10,7 @@ interface TimerSettingsProps {
   onResetTimer: () => void;
 }
 
-const TimerSettings: React.FC<TimerSettingsProps> = ({
+function TimerSettings({
   autoCleanInterval,
   onIntervalChange,
   timeRemaining,
@@ -19,7 +18,7 @@ const TimerSettings: React.FC<TimerSettingsProps> = ({
   timerActive,
   lastCleaned,
   onResetTimer,
-}) => {
+}: TimerSettingsProps) {
   return (
     <div className="mb-4">
       <div className="flex items-center justify-between mb-2">
@@ -49,9 +48,7 @@ const TimerSettings: React.FC<TimerSettingsProps> = ({
         max="120"
         step="5"
         value={autoCleanInterval}
-        onChange={(e) => {
-          onIntervalChange(parseInt(e.target.value));
-        }}
+        onChange={(e) => onIntervalChange(parseInt(e.target.value))}
         className="w-full h-2 bg-gray-200 dark:bg-gray-600 rounded-lg appearance-none cursor-pointer"
       />
       <div className="flex justify-between text-sm text-gray-500 dark:text-gray-400 mt-1">
@@ -64,6 +61,6 @@ const TimerSettings: React.FC<TimerSettingsProps> = ({
       </div>
     </div>
   );
-};
+}
 
 export default TimerSettings;

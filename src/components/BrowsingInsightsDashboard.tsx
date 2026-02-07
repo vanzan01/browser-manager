@@ -1,15 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import StorageAnalyzer, { DomainStorageMap } from '../services/StorageAnalyzer';
 import { ChevronLeft, LayoutDashboard, BarChart3 } from 'lucide-react';
 import SummaryView from './dashboard/SummaryView';
 import DetailView from './dashboard/DetailView';
 import AdvancedView from './dashboard/AdvancedView';
 
-// View modes for progressive disclosure
 type ViewMode = 'summary' | 'detail' | 'advanced';
+type SortMetric = 'total' | 'history' | 'cache' | 'cookies' | 'localStorage';
 
-const BrowsingInsightsDashboard: React.FC = () => {
-  // State
+function BrowsingInsightsDashboard() {
   const [viewMode, setViewMode] = useState<ViewMode>('summary');
   const [selectedDomain, setSelectedDomain] = useState<string | null>(null);
   const [domainData, setDomainData] = useState<DomainStorageMap>({});
@@ -17,27 +16,28 @@ const BrowsingInsightsDashboard: React.FC = () => {
   const [totalStorage, setTotalStorage] = useState(0);
   const [selectedTimeRange, setSelectedTimeRange] = useState('7d');
   const [timelineData, setTimelineData] = useState<any>({});
-  const [sortMetric, setSortMetric] = useState<'total' | 'history' | 'cache' | 'cookies' | 'localStorage'>('total');
+  const [sortMetric, setSortMetric] = useState<SortMetric>('total');
 
-  // Init storage analyzer
-  const analyzer = new StorageAnalyzer();
+  const analyzerRef = useRef(new StorageAnalyzer());
+  const analyzer = analyzerRef.current;
 
-  // Load storage data
+  function calculateTotal(data: DomainStorageMap): number {
+    return Object.values(data).reduce((sum, d) => sum + d.metrics.total, 0);
+  }
+
+  async function reloadDomainData() {
+    const data = await analyzer.getStorageByDomain();
+    setDomainData(data);
+    setTotalStorage(calculateTotal(data));
+    return data;
+  }
+
   useEffect(() => {
-    const loadData = async () => {
+    async function loadData() {
       setLoading(true);
       try {
-        const data = await analyzer.getStorageByDomain();
-        setDomainData(data);
+        await reloadDomainData();
 
-        // Calculate total storage
-        let total = 0;
-        Object.values(data).forEach(domain => {
-          total += domain.metrics.total;
-        });
-        setTotalStorage(total);
-
-        // Always load timeline data regardless of view mode
         const days = selectedTimeRange === '7d' ? 7 :
                     selectedTimeRange === '30d' ? 30 : 90;
         const timeline = await analyzer.getStorageTimeline(days);
@@ -47,37 +47,24 @@ const BrowsingInsightsDashboard: React.FC = () => {
       } finally {
         setLoading(false);
       }
-    };
+    }
 
     loadData();
-  }, [selectedTimeRange]); // Only reload when time range changes
+  }, [selectedTimeRange]);
 
-  // Handle domain selection
-  const handleDomainSelect = (domain: string) => {
+  function handleDomainSelect(domain: string) {
     setSelectedDomain(domain);
     setViewMode('detail');
-  };
+  }
 
-  // Handle domain deletion
-  const handleDomainClear = async (domain: string) => {
+  async function handleDomainClear(domain: string) {
     try {
       setLoading(true);
       const itemsDeleted = await analyzer.deleteSelective({
-        domain: domain,
+        domain,
         types: ['history', 'cookies', 'cache']
       });
-
-      // Reload data
-      const data = await analyzer.getStorageByDomain();
-      setDomainData(data);
-
-      // Recalculate total storage
-      let total = 0;
-      Object.values(data).forEach(domain => {
-        total += domain.metrics.total;
-      });
-      setTotalStorage(total);
-
+      await reloadDomainData();
       alert(`Deleted ${itemsDeleted} items for ${domain}`);
     } catch (error) {
       console.error('Error clearing domain:', error);
@@ -85,21 +72,16 @@ const BrowsingInsightsDashboard: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }
 
-  // Handle domain specific URL deletion
-  const handleUrlClear = async (domain: string, url: string) => {
+  async function handleUrlClear(_domain: string, url: string) {
     try {
       setLoading(true);
       const itemsDeleted = await analyzer.deleteSelective({
-        url: url,
+        url,
         types: ['history', 'cookies', 'cache']
       });
-
-      // Reload data
-      const data = await analyzer.getStorageByDomain();
-      setDomainData(data);
-
+      await reloadDomainData();
       alert(`Deleted ${itemsDeleted} items for ${url}`);
     } catch (error) {
       console.error('Error clearing URL:', error);
@@ -107,40 +89,23 @@ const BrowsingInsightsDashboard: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }
 
-  // Sort domains by selected metric
   const sortedDomains = Object.entries(domainData)
     .sort(([, a], [, b]) => b.metrics[sortMetric] - a.metrics[sortMetric]);
 
-  // Get the max domain size for scaling
   const maxDomainSize = Math.max(
-    ...Object.values(domainData).map(domain => domain.metrics.total),
+    ...Object.values(domainData).map(d => d.metrics.total),
     1
   );
 
-  async function bulkClearByType(type: 'history' | 'cache' | 'cookies' | 'localStorage') {
-    if (!confirm(`Are you sure you want to clear all ${type}?`)) {
-      return;
-    }
+  async function bulkClearByType(type: string) {
+    if (!confirm(`Are you sure you want to clear all ${type}?`)) return;
 
     try {
       setLoading(true);
-      await analyzer.deleteSelective({
-        types: [type]
-      });
-
-      // Reload data
-      const data = await analyzer.getStorageByDomain();
-      setDomainData(data);
-
-      // Recalculate total storage
-      let total = 0;
-      Object.values(data).forEach(domain => {
-        total += domain.metrics.total;
-      });
-      setTotalStorage(total);
-
+      await analyzer.deleteSelective({ types: [type] });
+      await reloadDomainData();
       alert(`All ${type} cleared successfully`);
     } catch (error) {
       console.error(`Error clearing ${type}:`, error);
@@ -152,7 +117,6 @@ const BrowsingInsightsDashboard: React.FC = () => {
 
   return (
     <div className="w-full max-w-4xl mx-auto bg-white dark:bg-gray-800 rounded-lg shadow-lg dark:shadow-gray-900/20 p-6">
-      {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center">
           {viewMode !== 'summary' && (
@@ -195,7 +159,6 @@ const BrowsingInsightsDashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* Loading indicator */}
       {loading && (
         <div className="flex justify-center py-8">
           <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
@@ -229,13 +192,13 @@ const BrowsingInsightsDashboard: React.FC = () => {
           selectedTimeRange={selectedTimeRange}
           onTimeRangeChange={setSelectedTimeRange}
           sortMetric={sortMetric}
-          onSortMetricChange={(metric) => setSortMetric(metric as any)}
+          onSortMetricChange={(metric) => setSortMetric(metric as SortMetric)}
           sortedDomains={sortedDomains}
-          onBulkClear={(type) => bulkClearByType(type as any)}
+          onBulkClear={bulkClearByType}
         />
       )}
     </div>
   );
-};
+}
 
 export default BrowsingInsightsDashboard;

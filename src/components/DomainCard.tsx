@@ -1,4 +1,3 @@
-import React from 'react';
 import { formatBytes, formatDate, getColorForValue } from '../utils/format';
 import { StorageMetrics } from '../services/StorageAnalyzer';
 
@@ -10,14 +9,13 @@ interface DomainCardProps {
   onDelete: () => void;
 }
 
-const DomainCard: React.FC<DomainCardProps> = ({ 
-  domain, 
-  metrics, 
-  maxSize = 1000000, 
+function DomainCard({
+  domain,
+  metrics,
+  maxSize = 1000000,
   onSelect,
-  onDelete 
-}) => {
-  // Calculate percentages for the progress bars
+  onDelete
+}: DomainCardProps) {
   const historyPercentage = (metrics.history / metrics.total) * 100;
   const cachePercentage = (metrics.cache / metrics.total) * 100;
   const cookiesPercentage = (metrics.cookies / metrics.total) * 100;
@@ -117,6 +115,6 @@ const DomainCard: React.FC<DomainCardProps> = ({
       </div>
     </div>
   );
-};
+}
 
-export default DomainCard; 
+export default DomainCard;

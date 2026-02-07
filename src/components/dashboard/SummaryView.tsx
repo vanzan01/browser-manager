@@ -1,4 +1,3 @@
-import React from 'react';
 import { DomainStorageMap } from '../../services/StorageAnalyzer';
 import DomainCard from '../DomainCard';
 import { formatBytes } from '../../utils/format';
@@ -12,17 +11,16 @@ interface SummaryViewProps {
   onDomainClear: (domain: string) => void;
 }
 
-const SummaryView: React.FC<SummaryViewProps> = ({
+function SummaryView({
   domainData,
   totalStorage,
   sortedDomains,
   maxDomainSize,
   onDomainSelect,
   onDomainClear,
-}) => {
+}: SummaryViewProps) {
   return (
     <>
-      {/* Total Storage */}
       <div className="mb-6 bg-gray-50 dark:bg-gray-700 p-4 rounded-lg">
         <div className="flex justify-between items-center mb-2">
           <h2 className="text-lg font-semibold text-gray-700 dark:text-gray-300">Total Browser Storage</h2>
@@ -33,7 +31,6 @@ const SummaryView: React.FC<SummaryViewProps> = ({
         </p>
       </div>
 
-      {/* Domain List */}
       <div className="mb-4">
         <div className="flex justify-between items-center mb-3">
           <h2 className="text-lg font-semibold text-gray-700 dark:text-gray-300">Domains by Storage Size</h2>
@@ -63,6 +60,6 @@ const SummaryView: React.FC<SummaryViewProps> = ({
       </div>
     </>
   );
-};
+}
 
 export default SummaryView;
