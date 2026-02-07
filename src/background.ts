@@ -116,6 +116,34 @@ async function clearHistory(): Promise<void> {
         }
       }
 
+      // Clear cookies for this domain
+      try {
+        const cookies = await chrome.cookies.getAll({});
+        for (const cookie of cookies) {
+          let cookieDomain = cookie.domain;
+          if (cookieDomain.startsWith('.')) {
+            cookieDomain = cookieDomain.substring(1);
+          }
+          if (isDomainMatch(cookieDomain, site)) {
+            await chrome.cookies.remove({
+              url: `http${cookie.secure ? 's' : ''}://${cookieDomain}${cookie.path}`,
+              name: cookie.name,
+            });
+            totalCleared++;
+          }
+        }
+      } catch (cookieError) {
+        console.error('Error clearing cookies for', site, cookieError);
+      }
+    }
+
+    // Clear cache via browsingData API
+    if (chrome.browsingData) {
+      try {
+        await chrome.browsingData.remove({ since: 0 }, { cache: true });
+      } catch (cacheError) {
+        console.error('Error clearing cache:', cacheError);
+      }
     }
 
     for (const rule of settings.cleanupRules) {
