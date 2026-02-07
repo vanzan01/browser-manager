@@ -31,52 +31,68 @@ export default function HistoryManager({ darkMode, onToggleDarkMode }: HistoryMa
   const [triggerSite, setTriggerSite] = useState<string>('');
   const [nextCleaningTime, setNextCleaningTime] = useState<number>(0);
   const [cleanupRules, setCleanupRules] = useState<CleanupRule[]>(DEFAULT_CLEANUP_RULES);
+  const [loaded, setLoaded] = useState(false);
 
-  const settingsMap: Record<string, [() => any, (v: any) => void]> = {
-    targetSites: [() => targetSites, setTargetSites],
-    historyManagerEnabled: [() => isEnabled, setIsEnabled],
-    autoCleanInterval: [() => autoCleanInterval, setAutoCleanInterval],
-    lastCleaned: [() => lastCleaned, setLastCleaned],
-    timerActive: [() => timerActive, setTimerActive],
-    nextCleaningTime: [() => nextCleaningTime, setNextCleaningTime],
-    triggerSite: [() => triggerSite, setTriggerSite],
-    cleanupRules: [() => cleanupRules, setCleanupRules],
-  };
-
+  // Load saved settings
   useEffect(() => {
-    const keys = Object.keys(settingsMap);
-
     if (isExtension) {
-      chrome.storage.sync.get(keys, (result: any) => {
-        for (const key of keys) {
-          if (result[key] !== undefined) {
-            settingsMap[key][1](result[key]);
-          }
-        }
+      chrome.storage.sync.get(['targetSites', 'historyManagerEnabled', 'autoCleanInterval', 'lastCleaned', 'timerActive', 'nextCleaningTime', 'triggerSite', 'cleanupRules'], (result: any) => {
+        if (result.targetSites) setTargetSites(result.targetSites);
+        if (result.historyManagerEnabled !== undefined) setIsEnabled(result.historyManagerEnabled);
+        if (result.autoCleanInterval !== undefined) setAutoCleanInterval(result.autoCleanInterval);
+        if (result.lastCleaned) setLastCleaned(result.lastCleaned);
+        if (result.timerActive !== undefined) setTimerActive(result.timerActive);
+        if (result.nextCleaningTime) setNextCleaningTime(result.nextCleaningTime);
+        if (result.triggerSite) setTriggerSite(result.triggerSite);
+        if (result.cleanupRules) setCleanupRules(result.cleanupRules);
+        setLoaded(true);
       });
     } else {
-      for (const key of keys) {
-        const stored = localStorage.getItem(key);
-        if (stored) {
-          settingsMap[key][1](JSON.parse(stored));
-        }
-      }
+      const savedSites = localStorage.getItem('targetSites');
+      const savedEnabled = localStorage.getItem('historyManagerEnabled');
+      const savedInterval = localStorage.getItem('autoCleanInterval');
+      const savedLastCleaned = localStorage.getItem('lastCleaned');
+      const savedTimerActive = localStorage.getItem('timerActive');
+      const savedNextCleaningTime = localStorage.getItem('nextCleaningTime');
+      const savedTriggerSite = localStorage.getItem('triggerSite');
+      const savedCleanupRules = localStorage.getItem('cleanupRules');
+      if (savedSites) setTargetSites(JSON.parse(savedSites));
+      if (savedEnabled) setIsEnabled(JSON.parse(savedEnabled));
+      if (savedInterval) setAutoCleanInterval(JSON.parse(savedInterval));
+      if (savedLastCleaned) setLastCleaned(JSON.parse(savedLastCleaned));
+      if (savedTimerActive) setTimerActive(JSON.parse(savedTimerActive));
+      if (savedNextCleaningTime) setNextCleaningTime(JSON.parse(savedNextCleaningTime));
+      if (savedTriggerSite) setTriggerSite(JSON.parse(savedTriggerSite));
+      if (savedCleanupRules) setCleanupRules(JSON.parse(savedCleanupRules));
+      setLoaded(true);
     }
   }, []);
 
+  // Save settings when they change (only after initial load)
   useEffect(() => {
+    if (!loaded) return;
     if (isExtension) {
-      const data: Record<string, any> = {};
-      for (const key of Object.keys(settingsMap)) {
-        data[key] = settingsMap[key][0]();
-      }
-      chrome.storage.sync.set(data);
+      chrome.storage.sync.set({
+        targetSites,
+        historyManagerEnabled: isEnabled,
+        autoCleanInterval,
+        lastCleaned,
+        timerActive,
+        nextCleaningTime,
+        triggerSite,
+        cleanupRules,
+      });
     } else {
-      for (const key of Object.keys(settingsMap)) {
-        localStorage.setItem(key, JSON.stringify(settingsMap[key][0]()));
-      }
+      localStorage.setItem('targetSites', JSON.stringify(targetSites));
+      localStorage.setItem('historyManagerEnabled', JSON.stringify(isEnabled));
+      localStorage.setItem('autoCleanInterval', JSON.stringify(autoCleanInterval));
+      localStorage.setItem('lastCleaned', JSON.stringify(lastCleaned));
+      localStorage.setItem('timerActive', JSON.stringify(timerActive));
+      localStorage.setItem('nextCleaningTime', JSON.stringify(nextCleaningTime));
+      localStorage.setItem('triggerSite', JSON.stringify(triggerSite));
+      localStorage.setItem('cleanupRules', JSON.stringify(cleanupRules));
     }
-  }, [targetSites, isEnabled, autoCleanInterval, lastCleaned, timerActive, nextCleaningTime, triggerSite, cleanupRules]);
+  }, [loaded, targetSites, isEnabled, autoCleanInterval, lastCleaned, timerActive, nextCleaningTime, triggerSite, cleanupRules]);
 
   useEffect(() => {
     if (!isEnabled || autoCleanInterval <= 0 || targetSites.length === 0 || !timerActive) {
