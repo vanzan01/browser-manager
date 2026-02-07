@@ -195,39 +195,6 @@ export default class StorageAnalyzer {
         }
       }
       
-      if (!options.types || options.types.includes('cookies')) {
-        const cookies = await this.getCookies();
-        
-        for (const cookie of cookies) {
-          if (!cookie.domain) continue;
-          
-          let domain = cookie.domain;
-          if (domain.startsWith('.')) {
-            domain = domain.substring(1);
-          }
-          
-          const shouldDelete = options.domain ? 
-            domain === options.domain || domain.endsWith(`.${options.domain}`) : 
-            true;
-          
-          if (shouldDelete) {
-            await chrome.cookies.remove({
-              url: `http${cookie.secure ? 's' : ''}://${domain}${cookie.path}`,
-              name: cookie.name,
-            });
-            itemsDeleted++;
-          }
-        }
-      }
-      
-      if (!options.types || options.types.includes('cache')) {
-        if (chrome.browsingData) {
-          const since = options.since ? options.since.getTime() : 0;
-          await chrome.browsingData.remove({ since }, { cache: true });
-          itemsDeleted += 1;
-        }
-      }
-      
       if (!options.types || options.types.includes('localStorage')) {
         for (const rule of cleanupRules) {
           const domainMatch = options.domain
@@ -258,6 +225,39 @@ export default class StorageAnalyzer {
           } catch (error) {
             console.error('Error clearing localStorage:', error);
           }
+        }
+      }
+
+      if (!options.types || options.types.includes('cookies')) {
+        const cookies = await this.getCookies();
+
+        for (const cookie of cookies) {
+          if (!cookie.domain) continue;
+
+          let domain = cookie.domain;
+          if (domain.startsWith('.')) {
+            domain = domain.substring(1);
+          }
+
+          const shouldDelete = options.domain ?
+            domain === options.domain || domain.endsWith(`.${options.domain}`) :
+            true;
+
+          if (shouldDelete) {
+            await chrome.cookies.remove({
+              url: `http${cookie.secure ? 's' : ''}://${domain}${cookie.path}`,
+              name: cookie.name,
+            });
+            itemsDeleted++;
+          }
+        }
+      }
+
+      if (!options.types || options.types.includes('cache')) {
+        if (chrome.browsingData) {
+          const since = options.since ? options.since.getTime() : 0;
+          await chrome.browsingData.remove({ since }, { cache: true });
+          itemsDeleted += 1;
         }
       }
       

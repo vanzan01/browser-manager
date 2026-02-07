@@ -44,7 +44,7 @@ export default function HistoryManager({ darkMode, onToggleDarkMode }: HistoryMa
         if (result.timerActive !== undefined) setTimerActive(result.timerActive);
         if (result.nextCleaningTime) setNextCleaningTime(result.nextCleaningTime);
         if (result.triggerSite) setTriggerSite(result.triggerSite);
-        if (result.cleanupRules) setCleanupRules(result.cleanupRules);
+        if (result.cleanupRules && result.cleanupRules.length > 0) setCleanupRules(result.cleanupRules);
         setLoaded(true);
       });
     } else {
@@ -163,6 +163,31 @@ export default function HistoryManager({ darkMode, onToggleDarkMode }: HistoryMa
           }
         }
 
+        // Run matching cleanup rules for this site (before cookies, so localStorage clears early)
+        for (const rule of cleanupRules) {
+          if (!isDomainMatch(site, rule.domain) && !isDomainMatch(rule.domain, site)) continue;
+          try {
+            const tabs = await chrome.tabs.query({});
+            for (const tab of tabs) {
+              if (!tab.url || !tab.url.includes(rule.domain) || !tab.id) continue;
+              try {
+                await chrome.scripting.executeScript({
+                  target: { tabId: tab.id },
+                  func: (localKeys: string[], sessionKeys: string[]) => {
+                    localKeys.forEach(key => localStorage.removeItem(key));
+                    sessionKeys.forEach(key => sessionStorage.removeItem(key));
+                  },
+                  args: [rule.localStorageKeys, rule.sessionStorageKeys]
+                });
+              } catch (scriptError) {
+                console.warn('Could not clear localStorage for tab:', tab.url, scriptError);
+              }
+            }
+          } catch (error) {
+            console.error(`Error clearing localStorage for ${rule.domain}:`, error);
+          }
+        }
+
         // Clear cookies for this domain
         try {
           const cookies = await chrome.cookies.getAll({});
@@ -190,34 +215,6 @@ export default function HistoryManager({ darkMode, onToggleDarkMode }: HistoryMa
           await chrome.browsingData.remove({ since: 0 }, { cache: true });
         } catch (cacheError) {
           console.error('Error clearing cache:', cacheError);
-        }
-      }
-
-      for (const rule of cleanupRules) {
-        const ruleMatchesSite = targetSites.some(
-          site => isDomainMatch(site, rule.domain) || isDomainMatch(rule.domain, site)
-        );
-        if (!ruleMatchesSite) continue;
-
-        try {
-          const tabs = await chrome.tabs.query({});
-          for (const tab of tabs) {
-            if (!tab.url || !tab.url.includes(rule.domain) || !tab.id) continue;
-            try {
-              await chrome.scripting.executeScript({
-                target: { tabId: tab.id },
-                func: (localKeys: string[], sessionKeys: string[]) => {
-                  localKeys.forEach(key => localStorage.removeItem(key));
-                  sessionKeys.forEach(key => sessionStorage.removeItem(key));
-                },
-                args: [rule.localStorageKeys, rule.sessionStorageKeys]
-              });
-            } catch (scriptError) {
-              console.warn('Could not clear localStorage for tab:', tab.url, scriptError);
-            }
-          }
-        } catch (error) {
-          console.error(`Error clearing localStorage for ${rule.domain}:`, error);
         }
       }
 

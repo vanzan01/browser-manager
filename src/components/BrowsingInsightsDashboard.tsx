@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import StorageAnalyzer, { DomainStorageMap } from '../services/StorageAnalyzer';
+import StorageAnalyzer, { DomainStorageMap, DEFAULT_CLEANUP_RULES } from '../services/StorageAnalyzer';
 import { ChevronLeft, LayoutDashboard, BarChart3 } from 'lucide-react';
 import SummaryView from './dashboard/SummaryView';
 import DetailView from './dashboard/DetailView';
@@ -62,8 +62,8 @@ function BrowsingInsightsDashboard() {
       setLoading(true);
       const itemsDeleted = await analyzer.deleteSelective({
         domain,
-        types: ['history', 'cookies', 'cache']
-      });
+        types: ['history', 'cookies', 'cache', 'localStorage']
+      }, DEFAULT_CLEANUP_RULES);
       await reloadDomainData();
       alert(`Deleted ${itemsDeleted} items for ${domain}`);
     } catch (error) {
@@ -79,8 +79,8 @@ function BrowsingInsightsDashboard() {
       setLoading(true);
       const itemsDeleted = await analyzer.deleteSelective({
         url,
-        types: ['history', 'cookies', 'cache']
-      });
+        types: ['history', 'cookies', 'cache', 'localStorage']
+      }, DEFAULT_CLEANUP_RULES);
       await reloadDomainData();
       alert(`Deleted ${itemsDeleted} items for ${url}`);
     } catch (error) {
@@ -104,7 +104,7 @@ function BrowsingInsightsDashboard() {
 
     try {
       setLoading(true);
-      await analyzer.deleteSelective({ types: [type] });
+      await analyzer.deleteSelective({ types: [type] }, DEFAULT_CLEANUP_RULES);
       await reloadDomainData();
       alert(`All ${type} cleared successfully`);
     } catch (error) {

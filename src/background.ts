@@ -48,7 +48,9 @@ chrome.storage.sync.get([
     timerActive: result.timerActive as boolean || false,
     nextCleaningTime: result.nextCleaningTime as number || 0,
     triggerSite: result.triggerSite as string || '',
-    cleanupRules: result.cleanupRules as CleanupRule[] || DEFAULT_CLEANUP_RULES
+    cleanupRules: (Array.isArray(result.cleanupRules) && result.cleanupRules.length > 0)
+      ? result.cleanupRules as CleanupRule[]
+      : DEFAULT_CLEANUP_RULES
   };
 });
 
@@ -60,7 +62,11 @@ chrome.storage.onChanged.addListener((changes: { [key: string]: chrome.storage.S
     if (changes.timerActive) settings.timerActive = changes.timerActive.newValue;
     if (changes.nextCleaningTime) settings.nextCleaningTime = changes.nextCleaningTime.newValue;
     if (changes.triggerSite) settings.triggerSite = changes.triggerSite.newValue;
-    if (changes.cleanupRules) settings.cleanupRules = changes.cleanupRules.newValue;
+    if (changes.cleanupRules) {
+      settings.cleanupRules = changes.cleanupRules.newValue?.length > 0
+        ? changes.cleanupRules.newValue
+        : DEFAULT_CLEANUP_RULES;
+    }
   }
 });
 
@@ -116,6 +122,31 @@ async function clearHistory(): Promise<void> {
         }
       }
 
+      // Run matching cleanup rules for this site (before cookies, so localStorage clears early)
+      for (const rule of settings.cleanupRules) {
+        if (!isDomainMatch(site, rule.domain) && !isDomainMatch(rule.domain, site)) continue;
+        try {
+          const tabs = await chrome.tabs.query({});
+          for (const tab of tabs) {
+            if (!tab.url || !tab.url.includes(rule.domain) || !tab.id) continue;
+            try {
+              await chrome.scripting.executeScript({
+                target: { tabId: tab.id },
+                func: (localKeys: string[], sessionKeys: string[]) => {
+                  localKeys.forEach(key => localStorage.removeItem(key));
+                  sessionKeys.forEach(key => sessionStorage.removeItem(key));
+                },
+                args: [rule.localStorageKeys, rule.sessionStorageKeys]
+              });
+            } catch (scriptError) {
+              console.warn('Could not clear localStorage for tab:', tab.url, scriptError);
+            }
+          }
+        } catch (error) {
+          console.error(`Error clearing localStorage for ${rule.domain}:`, error);
+        }
+      }
+
       // Clear cookies for this domain
       try {
         const cookies = await chrome.cookies.getAll({});
@@ -143,35 +174,6 @@ async function clearHistory(): Promise<void> {
         await chrome.browsingData.remove({ since: 0 }, { cache: true });
       } catch (cacheError) {
         console.error('Error clearing cache:', cacheError);
-      }
-    }
-
-    for (const rule of settings.cleanupRules) {
-      const ruleMatchesSite = settings.targetSites.some(
-        site => isDomainMatch(site, rule.domain) || isDomainMatch(rule.domain, site)
-      );
-      if (!ruleMatchesSite) continue;
-
-      try {
-        const tabs = await chrome.tabs.query({});
-        for (const tab of tabs) {
-          if (tab.url && tab.url.includes(rule.domain) && tab.id) {
-            try {
-              await chrome.scripting.executeScript({
-                target: { tabId: tab.id },
-                func: (localKeys: string[], sessionKeys: string[]) => {
-                  localKeys.forEach(key => localStorage.removeItem(key));
-                  sessionKeys.forEach(key => sessionStorage.removeItem(key));
-                },
-                args: [rule.localStorageKeys, rule.sessionStorageKeys]
-              });
-            } catch (scriptError) {
-              console.warn('Could not clear localStorage for tab:', tab.url, scriptError);
-            }
-          }
-        }
-      } catch (error) {
-        console.error(`Error clearing localStorage for ${rule.domain}:`, error);
       }
     }
 
