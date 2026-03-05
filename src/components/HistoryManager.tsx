@@ -4,7 +4,7 @@ import BrowsingInsightsDashboard from './BrowsingInsightsDashboard';
 import { CleanupRule, DEFAULT_CLEANUP_RULES } from '../services/StorageAnalyzer';
 import SiteList from './manager/SiteList';
 import TimerSettings from './manager/TimerSettings';
-import CleanupRulesComponent from './manager/CleanupRules';
+import StorageBrowser from './manager/StorageBrowser';
 
 const isExtension = typeof chrome !== 'undefined' && chrome.storage && chrome.history;
 
@@ -312,10 +312,7 @@ export default function HistoryManager({ darkMode, onToggleDarkMode }: HistoryMa
             onResetTimer={resetTimer}
           />
 
-          <CleanupRulesComponent
-            cleanupRules={cleanupRules}
-            onRulesChange={setCleanupRules}
-          />
+          <StorageBrowser targetSites={targetSites} />
 
           <div className="flex gap-2">
             <button
