@@ -19,6 +19,14 @@ export interface DomainStorageMap {
   }
 }
 
+export interface TimelineEntry {
+  total: number;
+  history: number;
+  cache: number;
+  cookies: number;
+  localStorage: number;
+}
+
 export interface DeleteOptions {
   domain?: string;
   url?: string;
@@ -26,35 +34,43 @@ export interface DeleteOptions {
   since?: Date;
 }
 
-// Helper function to extract domain from URL
-export const extractDomain = (url: string): string => {
+export interface CleanupRule {
+  domain: string;
+  localStorageKeys: string[];
+  sessionStorageKeys: string[];
+}
+
+export const DEFAULT_CLEANUP_RULES: CleanupRule[] = [
+  {
+    domain: 'reddit.com',
+    localStorageKeys: ['recent-subreddits-store'],
+    sessionStorageKeys: ['recent-subreddits-store'],
+  }
+];
+
+export function extractDomain(url: string): string {
   try {
-    const hostname = new URL(url).hostname;
-    return hostname;
-  } catch (e) {
+    return new URL(url).hostname;
+  } catch {
     return url;
   }
-};
+}
 
 export default class StorageAnalyzer {
-  // Use a type guard to avoid TypeScript errors
-  private isExtension = typeof chrome !== 'undefined' && 
-                       typeof chrome === 'object' && 
+  private isExtension = typeof chrome !== 'undefined' &&
+                       typeof chrome === 'object' &&
                        'browsingData' in chrome;
 
-  // Get storage usage by domain
   async getStorageByDomain(): Promise<DomainStorageMap> {
     const result: DomainStorageMap = {};
     
     if (!this.isExtension) {
-      return this.getMockData(); // Return mock data in development
+      return this.getMockData();
     }
 
     try {
-      // Get history data
       const historyItems = await this.getHistoryItems();
-      
-      // Process history items
+
       for (const item of historyItems) {
         if (!item.url) continue;
         
@@ -67,7 +83,6 @@ export default class StorageAnalyzer {
           };
         }
         
-        // Add history size (rough estimate - actual content would need to be fetched)
         const historySize = (item.title?.length || 0) + (item.url.length || 0);
         result[domain].metrics.history += historySize;
         result[domain].metrics.total += historySize;
@@ -81,7 +96,6 @@ export default class StorageAnalyzer {
           }
         }
         
-        // Add page-specific metrics
         if (!result[domain].pages[item.url]) {
           result[domain].pages[item.url] = this.createEmptyMetrics();
         }
@@ -92,17 +106,12 @@ export default class StorageAnalyzer {
         
         if (item.lastVisitTime) {
           const visitDate = new Date(item.lastVisitTime);
-          // @ts-ignore - Suppress null check error
           if (!result[domain].pages[item.url].lastAccessed || visitDate > result[domain].pages[item.url].lastAccessed) {
             result[domain].pages[item.url].lastAccessed = visitDate;
           }
         }
       }
       
-      // Get cache size estimates - this would require more complex integration
-      // with chrome.browsingData and estimation methods
-      
-      // For cookies, we can get a list but not sizes directly
       const cookies = await this.getCookies();
       for (const cookie of cookies) {
         if (!cookie.domain) continue;
@@ -119,7 +128,6 @@ export default class StorageAnalyzer {
           };
         }
         
-        // Rough estimate of cookie size
         const cookieSize = (cookie.name?.length || 0) + (cookie.value?.length || 0) + 50;
         result[domain].metrics.cookies += cookieSize;
         result[domain].metrics.total += cookieSize;
@@ -131,14 +139,11 @@ export default class StorageAnalyzer {
     return result;
   }
   
-  // Get storage timeline - mock implementation for now
-  async getStorageTimeline(days: number): Promise<any> {
-    // Hard-coded sample data that's guaranteed to work
-    const result: any = {};
+  async getStorageTimeline(days: number): Promise<Record<string, TimelineEntry>> {
+    const result: Record<string, TimelineEntry> = {};
     const now = new Date();
-    
-    // Use fixed values instead of random for consistency and reliability
-    const fixedSizes = [
+
+    const fixedSizes: TimelineEntry[] = [
       { total: 3500000, history: 700000, cache: 2000000, cookies: 300000, localStorage: 500000 },
       { total: 3200000, history: 650000, cache: 1800000, cookies: 280000, localStorage: 470000 },
       { total: 3000000, history: 600000, cache: 1700000, cookies: 250000, localStorage: 450000 },
@@ -155,35 +160,18 @@ export default class StorageAnalyzer {
       { total: 900000, history: 180000, cache: 650000, cookies: 50000, localStorage: 20000 },
       { total: 800000, history: 160000, cache: 600000, cookies: 40000, localStorage: 0 },
     ];
-    
-    // Generate timeline with fixed values
-    for (let i = 0; i < Math.min(days, fixedSizes.length); i++) {
+
+    for (let i = 0; i < days; i++) {
       const date = new Date(now);
       date.setDate(date.getDate() - i);
       const dateString = date.toISOString().split('T')[0];
-      
-      // Use a fixed size from our array
-      result[dateString] = fixedSizes[i];
+      result[dateString] = fixedSizes[i % fixedSizes.length];
     }
-    
-    // If we need more days than our fixed array, repeat the pattern
-    if (days > fixedSizes.length) {
-      for (let i = fixedSizes.length; i < days; i++) {
-        const date = new Date(now);
-        date.setDate(date.getDate() - i);
-        const dateString = date.toISOString().split('T')[0];
-        
-        // Repeat the pattern
-        const repeatIndex = i % fixedSizes.length;
-        result[dateString] = fixedSizes[repeatIndex];
-      }
-    }
-    
+
     return result;
   }
   
-  // Selectively delete browsing data
-  async deleteSelective(options: DeleteOptions): Promise<number> {
+  async deleteSelective(options: DeleteOptions, cleanupRules: CleanupRule[] = []): Promise<number> {
     if (!this.isExtension) {
       console.log('Delete operation only available in extension mode');
       return 0;
@@ -192,7 +180,6 @@ export default class StorageAnalyzer {
     try {
       let itemsDeleted = 0;
       
-      // Handle history deletion
       if (!options.types || options.types.includes('history')) {
         const historyItems = await this.getHistoryItems();
         
@@ -208,24 +195,55 @@ export default class StorageAnalyzer {
         }
       }
       
-      // Handle cookie deletion
+      if (!options.types || options.types.includes('localStorage')) {
+        for (const rule of cleanupRules) {
+          const domainMatch = options.domain
+            ? (options.domain === rule.domain || options.domain === `www.${rule.domain}` || options.domain.endsWith(`.${rule.domain}`))
+            : true;
+
+          if (!domainMatch) continue;
+
+          try {
+            const tabs = await chrome.tabs.query({});
+            for (const tab of tabs) {
+              if (tab.url && tab.url.includes(rule.domain) && tab.id) {
+                try {
+                  await chrome.scripting.executeScript({
+                    target: { tabId: tab.id },
+                    func: (lsKeys: string[], ssKeys: string[]) => {
+                      lsKeys.forEach(key => localStorage.removeItem(key));
+                      ssKeys.forEach(key => sessionStorage.removeItem(key));
+                    },
+                    args: [rule.localStorageKeys, rule.sessionStorageKeys]
+                  });
+                  itemsDeleted++;
+                } catch {
+                  console.warn('Could not clear localStorage for tab:', tab.url);
+                }
+              }
+            }
+          } catch (error) {
+            console.error('Error clearing localStorage:', error);
+          }
+        }
+      }
+
       if (!options.types || options.types.includes('cookies')) {
         const cookies = await this.getCookies();
-        
+
         for (const cookie of cookies) {
           if (!cookie.domain) continue;
-          
+
           let domain = cookie.domain;
           if (domain.startsWith('.')) {
             domain = domain.substring(1);
           }
-          
-          const shouldDelete = options.domain ? 
-            domain === options.domain || domain.endsWith(`.${options.domain}`) : 
+
+          const shouldDelete = options.domain ?
+            domain === options.domain || domain.endsWith(`.${options.domain}`) :
             true;
-          
+
           if (shouldDelete) {
-            // @ts-ignore - Suppress Chrome API type error
             await chrome.cookies.remove({
               url: `http${cookie.secure ? 's' : ''}://${domain}${cookie.path}`,
               name: cookie.name,
@@ -234,32 +252,14 @@ export default class StorageAnalyzer {
           }
         }
       }
-      
-      // Handle cache deletion
+
       if (!options.types || options.types.includes('cache')) {
-        // Cache deletion requires the browsingData API
-        // @ts-ignore - Suppress Chrome API type error
         if (chrome.browsingData) {
-          const removalOptions = {
-            "cache": true,
-          };
-          
-          // We can only delete all cache or cache within a timeframe
-          // Can't easily target by domain
           const since = options.since ? options.since.getTime() : 0;
-          
-          // @ts-ignore - Suppress Chrome API type error
-          await chrome.browsingData.remove({
-            "since": since
-          }, removalOptions);
-          
-          // Can't easily count items here
-          itemsDeleted += 1; // Just indicate something was deleted
+          await chrome.browsingData.remove({ since }, { cache: true });
+          itemsDeleted += 1;
         }
       }
-      
-      // Handle localStorage deletion - this is tricky from an extension
-      // Would need a content script approach to clear localStorage for specific domains
       
       return itemsDeleted;
     } catch (error) {
@@ -268,41 +268,31 @@ export default class StorageAnalyzer {
     }
   }
   
-  // Helper to determine if an item should be deleted based on options
   private shouldDeleteItem(url: string, options: DeleteOptions): boolean {
     try {
-      // Check URL match
       if (options.url && url !== options.url) {
         return false;
       }
-      
-      // Check domain match
+
       if (options.domain) {
         const itemDomain = extractDomain(url);
-        if (itemDomain !== options.domain && 
+        if (itemDomain !== options.domain &&
             !itemDomain.endsWith(`.${options.domain}`)) {
           return false;
         }
       }
-      
-      // Check date restriction
-      if (options.since) {
-        // Would need more context like visit time to implement this
-        // For now, we'll pretend all items pass this check
-      }
-      
+
+      // TODO: options.since filtering not yet implemented - requires visit time context
       return true;
-    } catch (e) {
+    } catch {
       return false;
     }
   }
   
-  // Helper to get history items
-  private async getHistoryItems(): Promise<any[]> {
+  private async getHistoryItems(): Promise<chrome.history.HistoryItem[]> {
     if (!this.isExtension) return [];
     
     try {
-      // @ts-ignore - Ignore TypeScript errors for Chrome API
       return await chrome.history.search({
         text: '',
         startTime: 0,
@@ -314,13 +304,10 @@ export default class StorageAnalyzer {
     }
   }
   
-  // Helper to get cookies
-  private async getCookies(): Promise<any[]> {
-    // @ts-ignore - Ignore TypeScript errors for Chrome API
+  private async getCookies(): Promise<chrome.cookies.Cookie[]> {
     if (!this.isExtension || !chrome.cookies) return [];
-    
+
     try {
-      // @ts-ignore - Ignore TypeScript errors for Chrome API
       return await chrome.cookies.getAll({});
     } catch (error) {
       console.error('Error fetching cookies:', error);
@@ -328,7 +315,6 @@ export default class StorageAnalyzer {
     }
   }
   
-  // Create empty metrics object
   private createEmptyMetrics(): StorageMetrics {
     return {
       history: 0,
@@ -341,63 +327,46 @@ export default class StorageAnalyzer {
     };
   }
   
-  // Create mock data for development
   private getMockData(): DomainStorageMap {
     const mockDomains = [
-      'google.com',
-      'facebook.com',
-      'youtube.com',
-      'twitter.com',
-      'instagram.com',
-      'netflix.com',
-      'amazon.com',
-      'reddit.com',
-      'wikipedia.org',
-      'linkedin.com'
+      'google.com', 'facebook.com', 'youtube.com', 'twitter.com', 'instagram.com',
+      'netflix.com', 'amazon.com', 'reddit.com', 'wikipedia.org', 'linkedin.com'
     ];
-    
+
+    const rand = (max: number): number => Math.floor(Math.random() * max);
+    const randDate = (): Date => new Date(Date.now() - rand(7 * 24 * 60 * 60 * 1000));
+
+    function randomMetrics(historyMax: number, cacheMax: number, cookiesMax: number, lsMax: number, itemsMax: number): StorageMetrics {
+      const history = rand(historyMax);
+      const cache = rand(cacheMax);
+      const cookies = rand(cookiesMax);
+      const ls = rand(lsMax);
+      return {
+        history,
+        cache,
+        cookies,
+        localStorage: ls,
+        total: history + cache + cookies + ls,
+        items: rand(itemsMax),
+        lastAccessed: randDate()
+      };
+    }
+
     const result: DomainStorageMap = {};
-    
-    mockDomains.forEach(domain => {
-      const historySize = Math.floor(Math.random() * 100000);
-      const cacheSize = Math.floor(Math.random() * 500000);
-      const cookiesSize = Math.floor(Math.random() * 50000);
-      const lsSize = Math.floor(Math.random() * 200000);
-      
+
+    for (const domain of mockDomains) {
       result[domain] = {
-        metrics: {
-          history: historySize,
-          cache: cacheSize,
-          cookies: cookiesSize,
-          localStorage: lsSize,
-          total: historySize + cacheSize + cookiesSize + lsSize,
-          items: Math.floor(Math.random() * 100),
-          lastAccessed: new Date(Date.now() - Math.floor(Math.random() * 7 * 24 * 60 * 60 * 1000))
-        },
+        metrics: randomMetrics(100000, 500000, 50000, 200000, 100),
         pages: {}
       };
-      
-      // Add some mock pages
-      const pageCount = Math.floor(Math.random() * 5) + 1;
+
+      const pageCount = rand(5) + 1;
       for (let i = 0; i < pageCount; i++) {
         const url = `https://${domain}/page${i + 1}`;
-        const pageHistorySize = Math.floor(Math.random() * 10000);
-        const pageCacheSize = Math.floor(Math.random() * 50000);
-        const pageCookiesSize = Math.floor(Math.random() * 5000);
-        const pageLsSize = Math.floor(Math.random() * 20000);
-        
-        result[domain].pages[url] = {
-          history: pageHistorySize,
-          cache: pageCacheSize,
-          cookies: pageCookiesSize,
-          localStorage: pageLsSize,
-          total: pageHistorySize + pageCacheSize + pageCookiesSize + pageLsSize,
-          items: Math.floor(Math.random() * 10),
-          lastAccessed: new Date(Date.now() - Math.floor(Math.random() * 7 * 24 * 60 * 60 * 1000))
-        };
+        result[domain].pages[url] = randomMetrics(10000, 50000, 5000, 20000, 10);
       }
-    });
-    
+    }
+
     return result;
   }
 } 
